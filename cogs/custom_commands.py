@@ -101,22 +101,43 @@ class CustomCommands(commands.Cog):
         user_roles = {r.id for r in member.roles}
         return bool(user_roles.intersection(set(allowed_role_ids)))
 
-    @app_commands.command(name="rankup", description="Befoerdere einen User zu einer neuen Rolle")
+    @app_commands.command(name="befoerdern", description="Befoerdert einen User (gibt Rolle)") 
     @app_commands.guilds(discord.Object(id=GUILD_ID))
     @app_commands.checks.has_permissions(manage_roles=True)
-    async def rankup(self, interaction: discord.Interaction, member: discord.Member, neue_rolle: discord.Role):
+    async def befoerdern(self, interaction: discord.Interaction, member: discord.Member, neue_rolle: discord.Role):
         settings = load_settings()
+        if not settings.get("befoerdern_enabled", True):
+            await interaction.response.send_message("\u274c Der /befoerdern Befehl ist deaktiviert.", ephemeral=True)
+            return
+        if not self._has_allowed_role(interaction.user, settings.get("befoerdern_allowed_roles", [])):
+            await interaction.response.send_message("\u274c Keine Berechtigung fuer /befoerdern.", ephemeral=True)
+            return
+        await member.add_roles(neue_rolle)
+        await interaction.response.send_message(f"{member.mention} wurde zu {neue_rolle.mention} befoerdert. \U0001f389", ephemeral=True)
+
+    @app_commands.command(name="rankup", description="Rangaufstieg: Alte Rolle entfernen, neue Rolle geben")
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.checks.has_permissions(manage_roles=True)
+    async def rankup(self, interaction: discord.Interaction, member: discord.Member, alte_rolle: discord.Role, neue_rolle: discord.Role):
+        settings = load_settings()
+        if not settings.get("rankup_enabled", True):
+            await interaction.response.send_message("\u274c Der /rankup Befehl ist deaktiviert.", ephemeral=True)
+            return
         if not self._has_allowed_role(interaction.user, settings.get("rankup_allowed_roles", [])):
             await interaction.response.send_message("\u274c Keine Berechtigung fuer /rankup.", ephemeral=True)
             return
+        await member.remove_roles(alte_rolle)
         await member.add_roles(neue_rolle)
-        await interaction.response.send_message(f"{member.mention} wurde zu {neue_rolle.mention} befoerdert.", ephemeral=True)
+        await interaction.response.send_message(f"{member.mention} wurde von {alte_rolle.mention} zu {neue_rolle.mention} befoerdert. \U0001f389", ephemeral=True)
 
-    @app_commands.command(name="drank", description="Entfernt eine Rolle von einem User")
+    @app_commands.command(name="drank", description="Degradiert einen User (Rolle entfernen)")
     @app_commands.guilds(discord.Object(id=GUILD_ID))
     @app_commands.checks.has_permissions(manage_roles=True)
     async def drank(self, interaction: discord.Interaction, member: discord.Member, rolle: discord.Role):
         settings = load_settings()
+        if not settings.get("drank_enabled", True):
+            await interaction.response.send_message("\u274c Der /drank Befehl ist deaktiviert.", ephemeral=True)
+            return
         if not self._has_allowed_role(interaction.user, settings.get("drank_allowed_roles", [])):
             await interaction.response.send_message("\u274c Keine Berechtigung fuer /drank.", ephemeral=True)
             return
@@ -128,6 +149,9 @@ class CustomCommands(commands.Cog):
     @app_commands.checks.has_permissions(manage_roles=True)
     async def einstellen(self, interaction: discord.Interaction, member: discord.Member, job_rolle: discord.Role):
         settings = load_settings()
+        if not settings.get("einstellen_enabled", True):
+            await interaction.response.send_message("\u274c Der /einstellen Befehl ist deaktiviert.", ephemeral=True)
+            return
         if not self._has_allowed_role(interaction.user, settings.get("einstellen_allowed_roles", [])):
             await interaction.response.send_message("\u274c Keine Berechtigung fuer /einstellen.", ephemeral=True)
             return
@@ -139,6 +163,9 @@ class CustomCommands(commands.Cog):
     @app_commands.checks.has_permissions(manage_roles=True)
     async def kuendigen(self, interaction: discord.Interaction, member: discord.Member, job_rolle: discord.Role):
         settings = load_settings()
+        if not settings.get("kuendigen_enabled", True):
+            await interaction.response.send_message("\u274c Der /kuendigen Befehl ist deaktiviert.", ephemeral=True)
+            return
         if not self._has_allowed_role(interaction.user, settings.get("kuendigen_allowed_roles", [])):
             await interaction.response.send_message("\u274c Keine Berechtigung fuer /kuendigen.", ephemeral=True)
             return
