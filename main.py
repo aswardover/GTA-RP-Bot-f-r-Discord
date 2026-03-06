@@ -28,7 +28,7 @@ class MyBot(commands.Bot):
         # Alle Cogs automatisch laden
         if not os.path.exists('./cogs'):
             os.makedirs('./cogs')
-            
+
         for filename in os.listdir('./cogs'):
             if filename.endswith('.py') and not filename.startswith('__'):
                 try:
@@ -39,6 +39,12 @@ class MyBot(commands.Bot):
 
     async def on_ready(self):
         logger.info(f'{self.user} ist bereit und online!')
+        try:
+            for guild in self.guilds:
+                synced = await self.tree.sync(guild=guild)
+                logger.info(f'{len(synced)} Slash-Befehle fuer Server {guild.name} synchronisiert!')
+        except Exception as e:
+            logger.error(f'Fehler beim Synchronisieren: {e}')
 
 bot = MyBot()
 
