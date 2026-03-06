@@ -30,9 +30,9 @@ settings = load_settings()
 discord_data = load_discord_data()
 
 # Dropdown Optionen vorbereiten
-channels = {c["id"]: c["name"] for c in discord_data.get("channels", [])}
-roles = {r["id"]: r["name"] for r in discord_data.get("roles", [])}
-categories = {cat["id"]: cat["name"] for cat in discord_data.get("categories", [])}
+channels = {str(c["id"]): c["name"] for c in discord_data.get("channels", [])}
+roles = {str(r["id"]): r["name"] for r in discord_data.get("roles", [])}
+categories = {str(cat["id"]): cat["name"] for cat in discord_data.get("categories", [])}
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "⚙️ Allgemein", "👋 Willkommen", "🎫 Tickets", "⏱️ Stempeluhr", 
@@ -70,7 +70,7 @@ with tab2:
             settings["welcome_embed"] = st.checkbox("Als Embed senden", value=settings.get("welcome_embed", True))
         with c2:
             settings["welcome_message"] = st.text_area("Nachricht ({user}, {server})", settings.get("welcome_message", "Willkommen {user}!"))
-
+    
     st.divider()
     en_goodbye = st.toggle("Abschieds-Nachrichten", value=settings.get("goodbye_enabled", False))
     settings["goodbye_enabled"] = en_goodbye
@@ -80,7 +80,7 @@ with tab2:
             current_gc = str(settings.get("goodbye_channel_id") or "")
             settings["goodbye_channel_id"] = st.selectbox("Ziel-Kanal ", options=list(channels.keys()), format_func=lambda x: channels[x], index=list(channels.keys()).index(current_gc) if current_gc in channels else 0, key="gc_sel")
         with c2:
-            settings["goodbye_message"] = st.text_area("Nachricht  ({user})", settings.get("goodbye_message", "{user} hat uns verlassen."))
+            settings["goodbye_message"] = st.text_area("Nachricht ({user})", settings.get("goodbye_message", "{user} hat uns verlassen."))
 
 # ── TAB 3: TICKETS ────────────────────────────────────────────
 with tab3:
@@ -94,14 +94,18 @@ with tab3:
             st.subheader("Konfiguration")
             current_tc = str(settings.get("tickets_panel_channel_id") or "")
             settings["tickets_panel_channel_id"] = st.selectbox("Panel-Kanal", options=list(channels.keys()), format_func=lambda x: channels[x], index=list(channels.keys()).index(current_tc) if current_tc in channels else 0)
+            
+            current_tcat = str(settings.get("tickets_category_id") or "")
+            settings["tickets_category_id"] = st.selectbox("Ziel-Kategorie (Discord Folder)", options=list(categories.keys()), format_func=lambda x: categories[x], index=list(categories.keys()).index(current_tcat) if current_tcat in categories else 0)
+            
             settings["tickets_panel_title"] = st.text_input("Titel", settings.get("tickets_panel_title", "Support-Ticket"))
             
-            if st.button("🚀 Panel im Discord veroeffentlichen", use_container_width=True):
+            if st.button("🚀 Ticket-Panel veroeffentlichen", use_container_width=True):
                 settings["tickets_publish_trigger"] = True
                 st.info("Wird beim Speichern gesendet!")
-
+        
         with col_cats:
-            st.subheader("Kategorien")
+            st.subheader("Kategorien (Auswahl im Ticket)")
             if "ticket_cats" not in st.session_state:
                 st.session_state.ticket_cats = settings.get("tickets_categories", [])
             
@@ -133,10 +137,24 @@ with tab4:
             
             if st.button("🚀 Stempel-Buttons veroeffentlichen", use_container_width=True):
                 settings["stempeluhr_publish_trigger"] = True
+                st.info("Wird beim Speichern gesendet!")
         
         with c2:
-            settings["stempeluhr_allowed_roles"] = st.multiselect("Erlaubte Rollen", options=list(roles.keys()), format_func=lambda x: roles[x], default=[str(r) for r in settings.get("stempeluhr_allowed_roles", [])])
-            settings["stempeluhr_admin_roles"] = st.multiselect("Admin Rollen", options=list(roles.keys()), format_func=lambda x: roles[x], default=[str(r) for r in settings.get("stempeluhr_admin_roles", [])])
+            settings["stempeluhr_allowed_roles"] = st.multiselect("Wer darf stempeln? (Rollen)", options=list(roles.keys()), format_func=lambda x: roles[x], default=[str(r) for r in settings.get("stempeluhr_allowed_roles", [])])
+            settings["stempeluhr_admin_roles"] = st.multiselect("Wer darf Stempel verwalten? (Admin Rollen)", options=list(roles.keys()), format_func=lambda x: roles[x], default=[str(r) for r in settings.get("stempeluhr_admin_roles", [])])
+
+# ── TAB 5: ANKUENDIGUNG ───────────────────────────────────────
+with tab5:
+    st.header("📢 Ankündigung senden")
+    current_ac = str(settings.get("announce_channel_id") or "")
+    settings["announce_channel_id"] = st.selectbox("Kanal für Ankündigung", options=list(channels.keys()), format_func=lambda x: channels[x], index=list(channels.keys()).index(current_ac) if current_ac in channels else 0)
+    
+    settings["announce_title"] = st.text_input("Titel", settings.get("announce_title", "Ankündigung"))
+    settings["announce_message"] = st.text_area("Nachricht", settings.get("announce_message", ""))
+    
+    if st.button("🚀 Ankündigung jetzt senden", use_container_width=True):
+        settings["announce_publish_trigger"] = True
+        st.info("Wird beim Speichern gesendet!")
 
 # ── TAB 6: PERSONAL ───────────────────────────────────────────
 with tab6:
@@ -152,11 +170,11 @@ with tab7:
     st.header("Custom Commands")
     if "cc_list" not in st.session_state:
         st.session_state.cc_list = settings.get("custom_commands", [])
-
+    
     if st.button("➕ Neuer Custom Command"):
         st.session_state.cc_list.append({"name": "befehl", "prefix": "/", "response": "Antwort"})
         st.rerun()
-
+        
     for i, cc in enumerate(st.session_state.cc_list):
         with st.expander(f"Command: {cc.get('prefix')}{cc.get('name')}"):
             cc["prefix"] = st.selectbox("Prefix", ["/", "!"], index=0 if cc.get("prefix") == "/" else 1, key=f"ccp_{i}")
@@ -170,5 +188,5 @@ with tab7:
 st.divider()
 if st.button("💾 SPEICHERN & AN BOT SENDEN", type="primary", use_container_width=True):
     save_settings(settings)
-    st.success("Konfiguration gespeichert!")
+    st.success("Konfiguration gespeichert! Der Bot wird die Änderungen in Kürze übernehmen.")
     st.rerun()
