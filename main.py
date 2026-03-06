@@ -18,17 +18,7 @@ class MyBot(commands.Bot):
         intents.guilds = True
         super().__init__(command_prefix='!', intents=intents, help_command=None)
 
-    def get_settings(self):
-        if os.path.exists(SETTINGS_FILE):
-            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {}
-
     async def setup_hook(self):
-        # Alle Cogs automatisch laden
-        if not os.path.exists('./cogs'):
-            os.makedirs('./cogs')
-
         for filename in os.listdir('./cogs'):
             if filename.endswith('.py') and not filename.startswith('__'):
                 try:
@@ -40,9 +30,9 @@ class MyBot(commands.Bot):
     async def on_ready(self):
         logger.info(f'{self.user} ist bereit und online!')
         try:
-            for guild in self.guilds:
-                synced = await self.tree.sync(guild=guild)
-                logger.info(f'{len(synced)} Slash-Befehle fuer Server {guild.name} synchronisiert!')
+            # Globaler Sync fuer alle Server
+            synced = await self.tree.sync()
+            logger.info(f'{len(synced)} globale Slash-Befehle synchronisiert!')
         except Exception as e:
             logger.error(f'Fehler beim Synchronisieren: {e}')
 
