@@ -294,6 +294,25 @@ def index_for_value(mapping, current_value):
             return i
     return 0
 
+def parse_id_list(raw_value):
+    """Parst komma-separierte IDs in eindeutige String-Liste."""
+    if not raw_value:
+        return []
+    ids = []
+    seen = set()
+    for part in str(raw_value).split(","):
+        value = part.strip()
+        if not value or value in seen:
+            continue
+        ids.append(value)
+        seen.add(value)
+    return ids
+
+def names_for_ids(mapping, id_list):
+    """Mappt IDs auf bekannte Namen fuer Default-Werte in Multiselects."""
+    reverse_map = {str(v): k for k, v in mapping.items()}
+    return [reverse_map[str(item)] for item in (id_list or []) if str(item) in reverse_map]
+
 def render_page_header(title, subtitle):
     st.markdown(f"<h2 class='section-title'>{title}</h2>", unsafe_allow_html=True)
     st.markdown(f"<p class='section-sub'>{subtitle}</p>", unsafe_allow_html=True)
@@ -301,20 +320,30 @@ def render_page_header(title, subtitle):
 def select_channel_id(label, channels_mapping, current_value, key_prefix):
     """Returns a channel ID string from dropdown options."""
     channel_names = list(channels_mapping.keys())
-    if not channel_names:
-        st.warning("Keine Channel-Daten verfuegbar. Bitte zuerst Discord-Daten synchronisieren.")
-        return None
+    current_str = str(current_value).strip() if current_value is not None else ""
+    selected_id = current_str or None
 
-    def_idx = index_for_value(channels_mapping, current_value)
-    selected_name = st.selectbox(
-        label,
-        options=[""] + channel_names,
-        index=(def_idx + 1) if channel_names else 0,
-        key=f"{key_prefix}_name",
-    )
-    if selected_name:
-        return str(channels_mapping.get(selected_name))
-    return None
+    if channel_names:
+        def_idx = index_for_value(channels_mapping, current_value)
+        selected_name = st.selectbox(
+            label,
+            options=[""] + channel_names,
+            index=(def_idx + 1) if channel_names else 0,
+            key=f"{key_prefix}_name",
+        )
+        if selected_name:
+            selected_id = str(channels_mapping.get(selected_name))
+    else:
+        st.warning("Keine Channel-Daten verfuegbar. Nutze unten die Fallback-ID oder synchronisiere Discord-Daten.")
+
+    manual_id = st.text_input(
+        f"{label} ID (Fallback)",
+        value=selected_id or "",
+        key=f"{key_prefix}_manual_id",
+    ).strip()
+    if manual_id:
+        return manual_id
+    return selected_id
 
 # --- OAUTH2 HILFSFUNKTIONEN ---
 def get_discord_auth_url():
@@ -496,18 +525,39 @@ else:
             ticket_channel_id = select_channel_id("Ticket Panel Channel", channels_map, current_ticket_channel, "tickets_panel")
 
             category_names = list(categories_map.keys())
-            selected_category_names = st.multiselect(
-                "Ticket Kategorien",
-                options=category_names,
-                default=extract_ticket_category_names(settings.get("tickets_categories", []), categories_map),
+            selected_categories = []
+            if category_names:
+                selected_category_names = st.multiselect(
+                    "Ticket Kategorien",
+                    options=category_names,
+                    default=extract_ticket_category_names(settings.get("tickets_categories", []), categories_map),
+                )
+                selected_categories.extend([
+                    {
+                        "name": category_name,
+                        "category_channel_id": int(categories_map[category_name]) if str(categories_map[category_name]).isdigit() else categories_map[category_name],
+                    }
+                    for category_name in selected_category_names
+                ])
+            else:
+                st.info("Keine Kategorien geladen. Du kannst unten IDs manuell eintragen.")
+
+            manual_ticket_categories = parse_id_list(
+                st.text_input(
+                    "Ticket Kategorie IDs (Fallback, komma-separiert)",
+                    value=", ".join([
+                        str(c.get("category_channel_id"))
+                        for c in settings.get("tickets_categories", [])
+                        if isinstance(c, dict) and c.get("category_channel_id") is not None
+                    ]),
+                    key="tickets_categories_manual",
+                )
             )
-            selected_categories = [
-                {
-                    "name": category_name,
-                    "category_channel_id": int(categories_map[category_name]) if str(categories_map[category_name]).isdigit() else categories_map[category_name],
-                }
-                for category_name in selected_category_names
-            ]
+            known_cat_ids = {str(c.get("category_channel_id")) for c in selected_categories}
+            for cat_id in manual_ticket_categories:
+                if cat_id in known_cat_ids:
+                    continue
+                selected_categories.append({"name": f"Kategorie {cat_id}", "category_channel_id": int(cat_id) if cat_id.isdigit() else cat_id})
 
             if st.button("Ticket Einstellungen speichern"):
                 settings["tickets_enabled"] = tickets_enabled
@@ -534,16 +584,40 @@ else:
             st.subheader("Berechtigungen")
             
             # Multi-Select für Rollen
-            selected_ein_roles = st.multiselect("Wer darf /stempel_ein nutzen?", options=role_names)
-            selected_aus_roles = st.multiselect("Wer darf /stempel_aus nutzen?", options=role_names)
+            default_ein_names = names_for_ids(roles_map, settings.get("stempel_ein_roles", []))
+            default_aus_names = names_for_ids(roles_map, settings.get("stempel_aus_roles", []))
+            selected_ein_roles = st.multiselect("Wer darf /stempel_ein nutzen?", options=role_names, default=default_ein_names)
+            selected_aus_roles = st.multiselect("Wer darf /stempel_aus nutzen?", options=role_names, default=default_aus_names)
+
+            manual_ein_ids = parse_id_list(
+                st.text_input(
+                    "Rollen-IDs fuer /stempel_ein (Fallback, komma-separiert)",
+                    value=", ".join([str(x) for x in settings.get("stempel_ein_roles", [])]),
+                    key="stempel_ein_roles_manual",
+                )
+            )
+            manual_aus_ids = parse_id_list(
+                st.text_input(
+                    "Rollen-IDs fuer /stempel_aus (Fallback, komma-separiert)",
+                    value=", ".join([str(x) for x in settings.get("stempel_aus_roles", [])]),
+                    key="stempel_aus_roles_manual",
+                )
+            )
 
             current_panel_channel = settings.get("stempeluhr_panel_channel_id", "")
             panel_channel_id = select_channel_id("Stempeluhr Panel Channel", channels_map, current_panel_channel, "stempeluhr_panel")
             
             if st.button("Stempel-Berechtigungen speichern"):
                 settings["stempeluhr_enabled"] = stempeluhr_enabled
-                settings["stempel_ein_roles"] = [roles_map[r] for r in selected_ein_roles]
-                settings["stempel_aus_roles"] = [roles_map[r] for r in selected_aus_roles]
+                resolved_ein = [str(roles_map[r]) for r in selected_ein_roles]
+                resolved_aus = [str(roles_map[r]) for r in selected_aus_roles]
+                final_ein = manual_ein_ids or resolved_ein
+                final_aus = manual_aus_ids or resolved_aus
+                settings["stempel_ein_roles"] = final_ein
+                settings["stempel_aus_roles"] = final_aus
+                # Backward/forward compatibility with cog keys.
+                settings["stempeluhr_allowed_roles"] = list(dict.fromkeys(final_ein + final_aus))
+                settings["stempeluhr_admin_roles"] = list(dict.fromkeys(final_aus))
                 settings["stempeluhr_panel_channel_id"] = panel_channel_id
                 save_settings(settings)
                 st.success("Stempel-Berechtigungen wurden aktualisiert!")
@@ -592,16 +666,26 @@ else:
             event = st.selectbox("Event", ["role_add", "role_remove"])
             custom_enabled = st.checkbox("Wenn-Funktionen aktivieren", value=settings.get("custom_rules_enabled", False))
             role_names = list(roles_map.keys())
-            selected_role = st.selectbox("Rolle", options=role_names)
+            selected_role = st.selectbox("Rolle", options=role_names) if role_names else ""
+            if not role_names:
+                st.info("Keine Rollen geladen. Trage die Rollen-ID manuell ein.")
+            manual_rule_role_id = st.text_input("Rollen-ID (Fallback)", key="ifrules_role_manual")
             action = st.selectbox("Aktion", ["send_message"])
             selected_channel_id = select_channel_id("Channel", channels_map, None, "ifrules_channel")
             message = st.text_area("Nachricht", placeholder="Verwende {user} und {server}")
             
             if st.button("Regel hinzufügen"):
                 settings["custom_rules_enabled"] = custom_enabled
+                role_id_value = manual_rule_role_id.strip() or (str(roles_map[selected_role]) if selected_role else "")
+                if not role_id_value:
+                    st.error("Bitte waehle eine Rolle oder trage eine Rollen-ID ein.")
+                    st.stop()
+                if not selected_channel_id:
+                    st.error("Bitte waehle einen Channel oder trage eine Channel-ID ein.")
+                    st.stop()
                 new_rule = {
                     "event": event,
-                    "role": str(roles_map[selected_role]),
+                    "role": role_id_value,
                     "action": action,
                     "channel": str(selected_channel_id),
                     "message": message
