@@ -39,10 +39,24 @@ st.markdown("""
         color: var(--as-text);
     }
     [data-testid="stHeader"] {
-        display: none;
+        background: transparent;
+        border-bottom: 0;
     }
     [data-testid="stToolbar"] {
         display: none;
+    }
+    [data-testid="collapsedControl"] {
+        display: block;
+        position: fixed;
+        top: 0.55rem;
+        left: 0.55rem;
+        z-index: 1000;
+    }
+    [data-testid="collapsedControl"] button {
+        background: rgba(11, 15, 28, 0.75);
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 10px;
+        color: var(--as-text);
     }
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #10192d 0%, #0e1628 100%);
