@@ -201,6 +201,36 @@ def render_page_header(title, subtitle):
     st.markdown(f"<h2 class='section-title'>{title}</h2>", unsafe_allow_html=True)
     st.markdown(f"<p class='section-sub'>{subtitle}</p>", unsafe_allow_html=True)
 
+def select_channel_id(label, channels_mapping, current_value, key_prefix):
+    """Returns a channel ID string, using dropdown when names exist and manual fallback always."""
+    channel_names = list(channels_mapping.keys())
+    selected_id = None
+    default_manual = str(current_value or "")
+
+    if channel_names:
+        def_idx = index_for_value(channels_mapping, current_value)
+        selected_name = st.selectbox(
+            label,
+            options=[""] + channel_names,
+            index=(def_idx + 1) if channel_names else 0,
+            key=f"{key_prefix}_name",
+        )
+        if selected_name:
+            selected_id = str(channels_mapping.get(selected_name))
+            default_manual = selected_id
+    else:
+        st.info("Keine Channel-Liste gefunden. Du kannst die Channel-ID manuell eintragen.")
+
+    manual_id = st.text_input(
+        "Channel ID (manuell)",
+        value=default_manual,
+        key=f"{key_prefix}_manual",
+    ).strip()
+
+    if manual_id:
+        return manual_id
+    return selected_id
+
 # --- OAUTH2 HILFSFUNKTIONEN ---
 def get_discord_auth_url():
     params = {
@@ -332,25 +362,23 @@ else:
             st.subheader("Channel & Kategorien")
             
             # Channel Auswahl
-            channel_names = list(channels_map.keys())
             current_ticket_channel = settings.get("tickets_panel_channel_id", settings.get("ticket_channel_id", ""))
-            def_idx = index_for_value(channels_map, current_ticket_channel)
-            new_channel = st.selectbox("Ticket Panel Channel", options=[""] + channel_names, index=(def_idx + 1) if channel_names else 0)
+            ticket_channel_id = select_channel_id("Ticket Panel Channel", channels_map, current_ticket_channel, "tickets_panel")
 
             category_names = list(categories_map.keys())
             selected_categories = st.multiselect("Ticket Kategorien", options=category_names, default=settings.get("tickets_categories", []))
 
             if st.button("Ticket Einstellungen speichern"):
                 settings["tickets_enabled"] = tickets_enabled
-                settings["ticket_channel_id"] = channels_map.get(new_channel) if new_channel else None
-                settings["tickets_panel_channel_id"] = channels_map.get(new_channel) if new_channel else None
+                settings["ticket_channel_id"] = ticket_channel_id
+                settings["tickets_panel_channel_id"] = ticket_channel_id
                 settings["tickets_categories"] = selected_categories
                 save_settings(settings)
                 st.success("Ticket Einstellungen gespeichert!")
 
             if st.button("Ticket Panel veröffentlichen"):
                 settings["tickets_enabled"] = tickets_enabled
-                settings["tickets_panel_channel_id"] = channels_map.get(new_channel) if new_channel else settings.get("tickets_panel_channel_id")
+                settings["tickets_panel_channel_id"] = ticket_channel_id or settings.get("tickets_panel_channel_id")
                 settings["tickets_categories"] = selected_categories
                 settings["tickets_publish_trigger"] = True
                 save_settings(settings)
@@ -368,22 +396,20 @@ else:
             selected_ein_roles = st.multiselect("Wer darf /stempel_ein nutzen?", options=role_names)
             selected_aus_roles = st.multiselect("Wer darf /stempel_aus nutzen?", options=role_names)
 
-            channel_names = list(channels_map.keys())
             current_panel_channel = settings.get("stempeluhr_panel_channel_id", "")
-            panel_idx = index_for_value(channels_map, current_panel_channel)
-            panel_channel = st.selectbox("Stempeluhr Panel Channel", options=[""] + channel_names, index=(panel_idx + 1) if channel_names else 0)
+            panel_channel_id = select_channel_id("Stempeluhr Panel Channel", channels_map, current_panel_channel, "stempeluhr_panel")
             
             if st.button("Stempel-Berechtigungen speichern"):
                 settings["stempeluhr_enabled"] = stempeluhr_enabled
                 settings["stempel_ein_roles"] = [roles_map[r] for r in selected_ein_roles]
                 settings["stempel_aus_roles"] = [roles_map[r] for r in selected_aus_roles]
-                settings["stempeluhr_panel_channel_id"] = channels_map.get(panel_channel) if panel_channel else None
+                settings["stempeluhr_panel_channel_id"] = panel_channel_id
                 save_settings(settings)
                 st.success("Stempel-Berechtigungen wurden aktualisiert!")
 
             if st.button("Stempeluhr Panel veröffentlichen"):
                 settings["stempeluhr_enabled"] = stempeluhr_enabled
-                settings["stempeluhr_panel_channel_id"] = channels_map.get(panel_channel) if panel_channel else settings.get("stempeluhr_panel_channel_id")
+                settings["stempeluhr_panel_channel_id"] = panel_channel_id or settings.get("stempeluhr_panel_channel_id")
                 settings["stempeluhr_publish_trigger"] = True
                 save_settings(settings)
                 st.success("Stempeluhr Panel wird veröffentlicht.")
@@ -399,8 +425,7 @@ else:
             
             caps_enabled = st.checkbox("Caps-Lock Filter aktivieren", value=settings.get("automod_caps_enabled", True))
 
-            channel_names = list(channels_map.keys())
-            log_channel = st.selectbox("Log-Channel", options=[""] + channel_names, index=0)
+            log_channel_id = select_channel_id("Log-Channel", channels_map, settings.get("automod_log_channel"), "automod_log")
             
             role_names = list(roles_map.keys())
             mute_role = st.selectbox("Mute-Rolle", options=[""] + role_names, index=0)
@@ -412,7 +437,7 @@ else:
                 settings["automod_caps_enabled"] = caps_enabled
                 settings["automod_caps_threshold"] = caps_threshold
                 settings["automod_action"] = action
-                settings["automod_log_channel"] = channels_map.get(log_channel) if log_channel else None
+                settings["automod_log_channel"] = log_channel_id
                 settings["automod_mute_role"] = roles_map.get(mute_role) if mute_role else None
                 save_settings(settings)
                 st.success("Automod-Einstellungen gespeichert!")
@@ -428,8 +453,7 @@ else:
             role_names = list(roles_map.keys())
             selected_role = st.selectbox("Rolle", options=role_names)
             action = st.selectbox("Aktion", ["send_message"])
-            channel_names = list(channels_map.keys())
-            selected_channel = st.selectbox("Channel", options=channel_names)
+            selected_channel_id = select_channel_id("Channel", channels_map, None, "ifrules_channel")
             message = st.text_area("Nachricht", placeholder="Verwende {user} und {server}")
             
             if st.button("Regel hinzufügen"):
@@ -438,7 +462,7 @@ else:
                     "event": event,
                     "role": str(roles_map[selected_role]),
                     "action": action,
-                    "channel": str(channels_map[selected_channel]),
+                    "channel": str(selected_channel_id),
                     "message": message
                 }
                 custom_rules.append(new_rule)
@@ -478,10 +502,8 @@ else:
         elif page == "Ankündigungen":
             render_page_header("Ankuendigungen", "Steuere Channel, Embed-Layout und Publishing fuer Ankuendigungen.")
             announce_enabled = st.checkbox("Ankündigungen aktivieren", value=settings.get("announce_enabled", True))
-            channel_names = list(channels_map.keys())
             current_announce_channel = settings.get("announce_channel_id", "")
-            ann_idx = index_for_value(channels_map, current_announce_channel)
-            announce_channel_name = st.selectbox("Ankündigungs-Channel", options=[""] + channel_names, index=(ann_idx + 1) if channel_names else 0)
+            announce_channel_id = select_channel_id("Ankündigungs-Channel", channels_map, current_announce_channel, "announce_channel")
             
             announce_embed_enabled = st.checkbox("Als Embed senden", value=settings.get("announce_embed_enabled", False))
             if announce_embed_enabled:
@@ -492,7 +514,7 @@ else:
                 
                 if st.button("Ankündigung Embed speichern"):
                     settings["announce_enabled"] = announce_enabled
-                    settings["announce_channel_id"] = channels_map.get(announce_channel_name) if announce_channel_name else settings.get("announce_channel_id")
+                    settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
                     settings["announce_embed_title"] = announce_embed_title
                     settings["announce_embed_description"] = announce_embed_description
                     settings["announce_embed_color"] = announce_embed_color
@@ -502,14 +524,14 @@ else:
             else:
                 if st.button("Einstellung speichern"):
                     settings["announce_enabled"] = announce_enabled
-                    settings["announce_channel_id"] = channels_map.get(announce_channel_name) if announce_channel_name else settings.get("announce_channel_id")
+                    settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
                     settings["announce_embed_enabled"] = announce_embed_enabled
                     save_settings(settings)
                     st.success("Gespeichert!")
 
             if st.button("Ankündigung veröffentlichen"):
                 settings["announce_enabled"] = announce_enabled
-                settings["announce_channel_id"] = channels_map.get(announce_channel_name) if announce_channel_name else settings.get("announce_channel_id")
+                settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
                 settings["announce_publish_trigger"] = True
                 save_settings(settings)
                 st.success("Ankündigung wird veröffentlicht.")
@@ -520,7 +542,7 @@ else:
             rr_data = load_reaction_roles()
             
             st.subheader("Neue Reaction Role Nachricht")
-            channel = st.selectbox("Channel", options=[""] + list(channels_map.keys()))
+            rr_channel_id = select_channel_id("Channel", channels_map, None, "reaction_roles_channel")
             title = st.text_input("Embed Titel", "Wähle deine Rollen")
             description = st.text_area("Embed Beschreibung", "Reagiere mit Emojis um Rollen zu bekommen.")
             color = st.text_input("Embed Farbe (Hex)", "#8a2be2")
@@ -550,7 +572,7 @@ else:
                 await add_reaction_role(str(msg.id), json.dumps(emoji_role_map))
 
             if st.button("Reaction Role Nachricht senden"):
-                if channel and title:
+                if rr_channel_id and title:
                     emoji_role_map = {}
                     if emoji1 and role1:
                         emoji_role_map[emoji1] = str(roles_map[role1])
@@ -563,7 +585,7 @@ else:
                     else:
                         settings["reaction_roles_enabled"] = reaction_roles_enabled
                         save_settings(settings)
-                        ch = int(channels_map[channel])
+                        ch = int(rr_channel_id)
                         embed = discord.Embed(title=title, description=description, color=int(color.lstrip("#"), 16))
                         bot.loop.create_task(_send_reaction_role(ch, embed, emoji_role_map))
                         st.success("Reaction Role Nachricht wird gesendet!")
@@ -604,7 +626,7 @@ else:
             warn_embed_footer = st.text_input("Warn Embed Footer", value=settings.get("warn_embed_footer", "Warnung erteilt"))
             
             st.subheader("Logs")
-            log_channel = st.selectbox("Moderation Log Channel", options=[""] + list(channels_map.keys()))
+            moderation_log_channel_id = select_channel_id("Moderation Log Channel", channels_map, settings.get("moderation_log_channel"), "moderation_log")
             
             if st.button("Moderation speichern"):
                 settings["management_enabled"] = moderation_enabled
@@ -617,19 +639,18 @@ else:
                 settings["warn_embed_description"] = warn_embed_description
                 settings["warn_embed_color"] = warn_embed_color
                 settings["warn_embed_footer"] = warn_embed_footer
-                settings["moderation_log_channel"] = channels_map.get(log_channel)
+                settings["moderation_log_channel"] = moderation_log_channel_id
                 save_settings(settings)
                 st.success("Moderation gespeichert!")
 
         elif page == "Logging":
             render_page_header("Logging", "Aktiviere Logging und ordne den Ziel-Channel zu.")
             logging_enabled = st.checkbox("Logging aktivieren", value=settings.get("logging_enabled", True))
-            
-            logging_channel = st.selectbox("Logging Channel", options=[""] + list(channels_map.keys()))
+            logging_channel_id = select_channel_id("Logging Channel", channels_map, settings.get("logging_channel_id"), "logging_channel")
             
             if st.button("Logging speichern"):
                 settings["logging_enabled"] = logging_enabled
-                settings["logging_channel_id"] = channels_map.get(logging_channel)
+                settings["logging_channel_id"] = logging_channel_id
                 save_settings(settings)
                 st.success("Logging gespeichert!")
 
