@@ -55,7 +55,8 @@ class Polls(commands.Cog):
         for i, opt in enumerate(option_list):
             view.add_item(PollButton(opt, interaction.id, i))
 
-        message = await interaction.response.send_message(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed, view=view)
+        message = await interaction.original_response()
 
         await add_poll(str(interaction.id), question, json.dumps(option_list), anonymous, json.dumps({}), json.dumps([0] * len(option_list)), str(interaction.channel.id), str(message.id))
 

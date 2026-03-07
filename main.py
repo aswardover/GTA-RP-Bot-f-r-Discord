@@ -9,6 +9,7 @@ from config import TOKEN, SETTINGS_FILE
 from embeds import success_embed, error_embed
 from collections import defaultdict
 import time
+from database import init_db
 
 # Logging Setup
 logging.basicConfig(
@@ -60,6 +61,7 @@ class MyBot(commands.Bot):
         await super().on_interaction(interaction)
 
     async def setup_hook(self):
+        await init_db()
         # Alle Cogs laden
         for filename in os.listdir('./cogs'):
             if filename.endswith('.py') and not filename.startswith('__'):
@@ -174,6 +176,20 @@ class MyBot(commands.Bot):
                 except Exception as e:
                     logger.error(f'Fehler beim Ankuendigung senden: {e}')
                 settings['announce_publish_trigger'] = False
+                changed = True
+
+            # ── Discord-Daten fuer Dashboard synchronisieren ──
+            if settings.get('discord_data_sync_trigger'):
+                try:
+                    exporter = self.cogs.get('DataExporter')
+                    if exporter and hasattr(exporter, 'export_data'):
+                        await exporter.export_data()
+                        logger.info('Discord-Daten fuer Dashboard wurden synchronisiert.')
+                    else:
+                        logger.warning('DataExporter-Cog nicht verfuegbar, Sync uebersprungen.')
+                except Exception as e:
+                    logger.error(f'Fehler bei Discord-Daten-Sync: {e}')
+                settings['discord_data_sync_trigger'] = False
                 changed = True
 
             if changed:

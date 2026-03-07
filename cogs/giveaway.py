@@ -4,8 +4,9 @@ from discord.ext import commands, tasks
 from discord import app_commands
 import asyncio
 import random
+import json
 from datetime import datetime, timedelta
-from database import add_giveaway, get_giveaways, remove_giveaway
+from database import add_giveaway, get_giveaways, remove_giveaway, update_giveaway_participants
 
 class GiveawayView(discord.ui.View):
     def __init__(self, giveaway_id):
@@ -14,17 +15,19 @@ class GiveawayView(discord.ui.View):
 
     @discord.ui.button(label="Teilnehmen", style=discord.ButtonStyle.green, custom_id="giveaway_join")
     async def join_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
-        data = load_giveaway_data()
-        if str(self.giveaway_id) not in data:
+        giveaways = await get_giveaways()
+        giveaway = next((g for g in giveaways if g[1] == str(self.giveaway_id)), None)
+
+        if not giveaway:
             await interaction.response.send_message("Giveaway nicht gefunden.", ephemeral=True)
             return
 
-        giveaway = data[str(self.giveaway_id)]
-        if interaction.user.id in giveaway["participants"]:
+        participants = json.loads(giveaway[6] or "[]")
+        if interaction.user.id in participants:
             await interaction.response.send_message("Du nimmst bereits teil!", ephemeral=True)
         else:
-            giveaway["participants"].append(interaction.user.id)
-            save_giveaway_data(data)
+            participants.append(interaction.user.id)
+            await update_giveaway_participants(str(self.giveaway_id), json.dumps(participants))
             await interaction.response.send_message("Du nimmst jetzt am Giveaway teil!", ephemeral=True)
 
 class Giveaway(commands.Cog):
@@ -55,7 +58,8 @@ class Giveaway(commands.Cog):
         embed.set_footer(text=settings.get("giveaway_embed_footer", "Klicke auf Teilnehmen!"))
 
         view = GiveawayView(giveaway_id)
-        message = await interaction.response.send_message(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed, view=view)
+        message = await interaction.original_response()
 
         await add_giveaway(str(giveaway_id), item, end_time.isoformat(), str(interaction.channel.id), str(message.id), json.dumps([]))
 
@@ -69,40 +73,43 @@ class Giveaway(commands.Cog):
             end_time = datetime.fromisoformat(g[2])
             if now >= end_time:
                 await self.end_giveaway(g[1], 0)  # giveaway_id
-                await remove_giveaway(g[1])
 
     async def end_giveaway(self, giveaway_id, delay):
         if delay > 0:
             await asyncio.sleep(delay)
 
-        data = load_giveaway_data()
-        if str(giveaway_id) not in data:
+        giveaways = await get_giveaways()
+        giveaway = next((g for g in giveaways if g[1] == str(giveaway_id)), None)
+
+        if not giveaway:
             return
 
-        giveaway = data[str(giveaway_id)]
-        participants = giveaway["participants"]
+        participants = json.loads(giveaway[6] or "[]")
 
         if not participants:
             winner = None
         else:
             winner = random.choice(participants)
 
-        channel = self.bot.get_channel(giveaway["channel_id"])
+        channel = self.bot.get_channel(int(giveaway[3]))
         if channel:
             try:
-                message = await channel.fetch_message(giveaway["message_id"])
+                message = await channel.fetch_message(int(giveaway[4]))
                 embed = message.embeds[0]
                 if winner:
                     winner_user = self.bot.get_user(winner)
-                    embed.description += f"\n\n🏆 Gewinner: {winner_user.mention}"
+                    if winner_user:
+                        winner_text = winner_user.mention
+                    else:
+                        winner_text = f"<@{winner}>"
+                    embed.description += f"\n\n🏆 Gewinner: {winner_text}"
                 else:
                     embed.description += "\n\n❌ Keine Teilnehmer."
                 await message.edit(embed=embed, view=None)
-            except:
+            except Exception:
                 pass
 
-        del data[str(giveaway_id)]
-        save_giveaway_data(data)
+        await remove_giveaway(str(giveaway_id))
 
 async def setup(bot):
     await bot.add_cog(Giveaway(bot))

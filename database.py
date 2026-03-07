@@ -118,6 +118,11 @@ async def remove_giveaway(giveaway_id):
         await db.execute('DELETE FROM giveaways WHERE giveaway_id = ?', (giveaway_id,))
         await db.commit()
 
+async def update_giveaway_participants(giveaway_id, participants):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute('UPDATE giveaways SET participants = ? WHERE giveaway_id = ?', (participants, giveaway_id))
+        await db.commit()
+
 async def add_poll(poll_id, question, options, anonymous, votes, counts, channel_id, message_id):
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute('INSERT INTO polls (poll_id, question, options, anonymous, votes, counts, channel_id, message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -155,5 +160,4 @@ async def get_cached_settings():
         pass  # Implement later
     return settings_cache
 
-# Init on startup
-asyncio.create_task(init_db())
+# Init is triggered explicitly from bot startup.
