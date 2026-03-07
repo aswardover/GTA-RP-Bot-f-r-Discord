@@ -3,6 +3,7 @@ import streamlit as st
 import json
 import os
 import requests
+import discord
 from config import SETTINGS_FILE, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DASHBOARD_REDIRECT_URI
 
 # --- KONFIGURATION ---
@@ -49,6 +50,7 @@ st.markdown("""
     }
     .status-card {
         background-color: #1a1a1a;
+        color: #ffffff;
         padding: 20px;
         border-radius: 10px;
         border-left: 5px solid #8a2be2;
@@ -59,10 +61,10 @@ st.markdown("""
         margin-bottom: 20px;
     }
     </style>
-    """, unsafe_allow_index=True)
+    """, unsafe_allow_html=True)
 
 # --- LOGO ---
-st.markdown('<div class="logo"><img src="https://cdn.discordapp.com/attachments/1317606543952183367/1479593240884805794/oVer.png?ex=69ac9a16&is=69ab4896&hm=e46c698ec82f7ab40b02d1b266cb4d9a69d94d8b3831122b31e46a87c84d8f3e&" width="200"></div>', unsafe_allow_index=True)
+st.markdown('<div class="logo"><img src="https://cdn.discordapp.com/attachments/1317606543952183367/1479593240884805794/oVer.png?ex=69ac9a16&is=69ab4896&hm=e46c698ec82f7ab40b02d1b266cb4d9a69d94d8b3831122b31e46a87c84d8f3e&" width="200"></div>', unsafe_allow_html=True)
 
 def load_reaction_roles():
     if os.path.exists("reaction_roles.json"):
@@ -88,6 +90,32 @@ def load_discord_data():
         with open(DISCORD_DATA_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {"channels": {}, "roles": {}, "categories": {}}
+
+def normalize_named_mapping(raw):
+    """Normalisiert Discord-Daten auf Name->ID Mapping (dict), auch wenn Listen gespeichert wurden."""
+    if isinstance(raw, dict):
+        return {str(k): str(v) for k, v in raw.items()}
+    if isinstance(raw, list):
+        result = {}
+        for item in raw:
+            if isinstance(item, dict):
+                name = item.get("name") or item.get("label") or item.get("title")
+                value = item.get("id") or item.get("value")
+                if name is not None and value is not None:
+                    result[str(name)] = str(value)
+            elif isinstance(item, (list, tuple)) and len(item) == 2:
+                result[str(item[0])] = str(item[1])
+        return result
+    return {}
+
+def index_for_value(mapping, current_value):
+    if not mapping:
+        return 0
+    values = list(mapping.values())
+    for i, val in enumerate(values):
+        if str(val) == str(current_value):
+            return i
+    return 0
 
 # --- OAUTH2 HILFSFUNKTIONEN ---
 def get_discord_auth_url():
@@ -131,12 +159,12 @@ def login_form():
     st.info("Logge dich mit deinem Discord Account ein.")
     
     auth_url = get_discord_auth_url()
-    st.markdown(f'[Mit Discord anmelden]({auth_url})', unsafe_allow_index=True)
+    st.markdown(f'[Mit Discord anmelden]({auth_url})')
     
     # Check for code in query params
-    query_params = st.experimental_get_query_params()
-    if "code" in query_params:
-        code = query_params["code"][0]
+    query_params = st.query_params
+    code = query_params.get("code")
+    if code:
         token_data = exchange_code_for_token(code)
         if "access_token" in token_data:
             st.session_state.access_token = token_data["access_token"]
@@ -144,7 +172,7 @@ def login_form():
             if "id" in user_info:
                 st.session_state.user_id = user_info["id"]
                 st.session_state.logged_in = True
-                st.experimental_set_query_params()  # Clear params
+                st.query_params.clear()  # Clear params
                 st.rerun()
         else:
             st.error("Fehler beim Anmelden. Versuche es erneut.")
@@ -168,36 +196,33 @@ else:
     else:
         # ADMIN DASHBOARD
         st.sidebar.title("🎮 Bot Control Panel")
+        settings = load_settings()
+        discord_data = load_discord_data()
+        channels_map = normalize_named_mapping(discord_data.get("channels", {}))
+        roles_map = normalize_named_mapping(discord_data.get("roles", {}))
+        categories_map = normalize_named_mapping(discord_data.get("categories", {}))
         
-        # Dynamische Navigation basierend auf enabled-Status
-        pages = ["Übersicht"]
-        if settings.get("tickets_enabled", False):
-            pages.append("Tickets")
-        if settings.get("stempeluhr_enabled", False):
-            pages.append("Stempeluhr")
-        if settings.get("automod_enabled", False):
-            pages.append("Automod")
-        if settings.get("custom_rules_enabled", False):
-            pages.append("Wenn-Funktionen")
-        if settings.get("giveaway_enabled", False):
-            pages.append("Giveaway")
-        pages.append("Ankündigungen")  # Immer verfügbar für Embed-Konfiguration
-        if settings.get("reaction_roles_enabled", False):
-            pages.append("Reaction Roles")
-        if settings.get("polls_enabled", False):
-            pages.append("Umfragen")
-        pages.append("Moderation")  # Immer verfügbar
-        pages.append("Logging")  # Immer verfügbar
-        pages.append("Einstellungen")  # Immer verfügbar
+        # Navigation immer vollständig anzeigen; Aktivierung erfolgt im jeweiligen Reiter.
+        pages = [
+            "Übersicht",
+            "Tickets",
+            "Stempeluhr",
+            "Automod",
+            "Wenn-Funktionen",
+            "Giveaway",
+            "Ankündigungen",
+            "Reaction Roles",
+            "Umfragen",
+            "Moderation",
+            "Logging",
+            "Einstellungen",
+        ]
         
         page = st.sidebar.radio("Navigation", pages)
         
         if st.sidebar.button("Abmelden"):
             st.session_state.logged_in = False
             st.rerun()
-
-        settings = load_settings()
-        discord_data = load_discord_data()
         
         if page == "Übersicht":
             st.title("📊 Bot Übersicht")
@@ -210,54 +235,72 @@ else:
                 st.metric("Tickets", settings.get("ticket_count", 0))
             
             st.markdown("### 🔔 Letzte Aktivitäten")
-            st.markdown('<div class="status-card">Bot erfolgreich gestartet. Alle Systeme laufen nominal.</div>', unsafe_allow_index=True)
+            st.markdown('<div class="status-card">Bot erfolgreich gestartet. Alle Systeme laufen nominal.</div>', unsafe_allow_html=True)
 
         elif page == "Tickets":
             st.title("🎫 Ticket System")
             st.write("Konfiguriere hier die Ticket-Einstellungen.")
-            
-            channels = discord_data.get("channels", {})
-            categories = discord_data.get("categories", {})
+            tickets_enabled = st.checkbox("Tickets aktivieren", value=settings.get("tickets_enabled", False))
             
             st.subheader("Channel & Kategorien")
             
             # Channel Auswahl
-            channel_names = list(channels.keys())
-            current_ticket_channel = settings.get("ticket_channel_id", "")
-            
-            # Suche Index für Default
-            def_idx = 0
-            for i, cid in enumerate(channels.values()):
-                if str(cid) == str(current_ticket_channel):
-                    def_idx = i
-                    break
-            
-            new_channel = st.selectbox("Ticket Log Channel", options=channel_names, index=def_idx if channel_names else 0)
-            if new_channel:
-                settings["ticket_channel_id"] = channels[new_channel]
-                
-            if st.button("Einstellungen speichern"):
+            channel_names = list(channels_map.keys())
+            current_ticket_channel = settings.get("tickets_panel_channel_id", settings.get("ticket_channel_id", ""))
+            def_idx = index_for_value(channels_map, current_ticket_channel)
+            new_channel = st.selectbox("Ticket Panel Channel", options=[""] + channel_names, index=(def_idx + 1) if channel_names else 0)
+
+            category_names = list(categories_map.keys())
+            selected_categories = st.multiselect("Ticket Kategorien", options=category_names, default=settings.get("tickets_categories", []))
+
+            if st.button("Ticket Einstellungen speichern"):
+                settings["tickets_enabled"] = tickets_enabled
+                settings["ticket_channel_id"] = channels_map.get(new_channel) if new_channel else None
+                settings["tickets_panel_channel_id"] = channels_map.get(new_channel) if new_channel else None
+                settings["tickets_categories"] = selected_categories
                 save_settings(settings)
                 st.success("Ticket Einstellungen gespeichert!")
+
+            if st.button("Ticket Panel veröffentlichen"):
+                settings["tickets_enabled"] = tickets_enabled
+                settings["tickets_panel_channel_id"] = channels_map.get(new_channel) if new_channel else settings.get("tickets_panel_channel_id")
+                settings["tickets_categories"] = selected_categories
+                settings["tickets_publish_trigger"] = True
+                save_settings(settings)
+                st.success("Ticket Panel wird veröffentlicht.")
 
         elif page == "Stempeluhr":
             st.title("🕐 Stempeluhr System")
             st.write("Berechtigungen und Logs für die Stempeluhr.")
+            stempeluhr_enabled = st.checkbox("Stempeluhr aktivieren", value=settings.get("stempeluhr_enabled", False))
             
-            roles = discord_data.get("roles", {})
-            role_names = list(roles.keys())
+            role_names = list(roles_map.keys())
             
             st.subheader("Berechtigungen")
             
             # Multi-Select für Rollen
             selected_ein_roles = st.multiselect("Wer darf /stempel_ein nutzen?", options=role_names)
             selected_aus_roles = st.multiselect("Wer darf /stempel_aus nutzen?", options=role_names)
+
+            channel_names = list(channels_map.keys())
+            current_panel_channel = settings.get("stempeluhr_panel_channel_id", "")
+            panel_idx = index_for_value(channels_map, current_panel_channel)
+            panel_channel = st.selectbox("Stempeluhr Panel Channel", options=[""] + channel_names, index=(panel_idx + 1) if channel_names else 0)
             
             if st.button("Stempel-Berechtigungen speichern"):
-                settings["stempel_ein_roles"] = [roles[r] for r in selected_ein_roles]
-                settings["stempel_aus_roles"] = [roles[r] for r in selected_aus_roles]
+                settings["stempeluhr_enabled"] = stempeluhr_enabled
+                settings["stempel_ein_roles"] = [roles_map[r] for r in selected_ein_roles]
+                settings["stempel_aus_roles"] = [roles_map[r] for r in selected_aus_roles]
+                settings["stempeluhr_panel_channel_id"] = channels_map.get(panel_channel) if panel_channel else None
                 save_settings(settings)
                 st.success("Stempel-Berechtigungen wurden aktualisiert!")
+
+            if st.button("Stempeluhr Panel veröffentlichen"):
+                settings["stempeluhr_enabled"] = stempeluhr_enabled
+                settings["stempeluhr_panel_channel_id"] = channels_map.get(panel_channel) if panel_channel else settings.get("stempeluhr_panel_channel_id")
+                settings["stempeluhr_publish_trigger"] = True
+                save_settings(settings)
+                st.success("Stempeluhr Panel wird veröffentlicht.")
 
         elif page == "Automod":
             st.title("🤖 Automod System")
@@ -269,22 +312,23 @@ else:
             caps_threshold = st.slider("Caps-Schwellenwert", 0.0, 1.0, value=settings.get("automod_caps_threshold", 0.7))
             action = st.selectbox("Aktion bei Verstoß", ["delete", "warn", "mute", "ban"], index=["delete", "warn", "mute", "ban"].index(settings.get("automod_action", "delete")))
             
-            channels = discord_data.get("channels", {})
-            channel_names = list(channels.keys())
+            caps_enabled = st.checkbox("Caps-Lock Filter aktivieren", value=settings.get("automod_caps_enabled", True))
+
+            channel_names = list(channels_map.keys())
             log_channel = st.selectbox("Log-Channel", options=[""] + channel_names, index=0)
             
-            roles = discord_data.get("roles", {})
-            role_names = list(roles.keys())
+            role_names = list(roles_map.keys())
             mute_role = st.selectbox("Mute-Rolle", options=[""] + role_names, index=0)
             
             if st.button("Automod speichern"):
                 settings["automod_enabled"] = automod_enabled
                 settings["automod_banned_words"] = [w.strip() for w in banned_words.split(",") if w.strip()]
                 settings["automod_spam_threshold"] = spam_threshold
+                settings["automod_caps_enabled"] = caps_enabled
                 settings["automod_caps_threshold"] = caps_threshold
                 settings["automod_action"] = action
-                settings["automod_log_channel"] = channels.get(log_channel) if log_channel else None
-                settings["automod_mute_role"] = roles.get(mute_role) if mute_role else None
+                settings["automod_log_channel"] = channels_map.get(log_channel) if log_channel else None
+                settings["automod_mute_role"] = roles_map.get(mute_role) if mute_role else None
                 save_settings(settings)
                 st.success("Automod-Einstellungen gespeichert!")
 
@@ -296,21 +340,21 @@ else:
             
             st.subheader("Neue Regel hinzufügen")
             event = st.selectbox("Event", ["role_add", "role_remove"])
-            roles = discord_data.get("roles", {})
-            role_names = list(roles.keys())
+            custom_enabled = st.checkbox("Wenn-Funktionen aktivieren", value=settings.get("custom_rules_enabled", False))
+            role_names = list(roles_map.keys())
             selected_role = st.selectbox("Rolle", options=role_names)
             action = st.selectbox("Aktion", ["send_message"])
-            channels = discord_data.get("channels", {})
-            channel_names = list(channels.keys())
+            channel_names = list(channels_map.keys())
             selected_channel = st.selectbox("Channel", options=channel_names)
             message = st.text_area("Nachricht", placeholder="Verwende {user} und {server}")
             
             if st.button("Regel hinzufügen"):
+                settings["custom_rules_enabled"] = custom_enabled
                 new_rule = {
                     "event": event,
-                    "role": str(roles[selected_role]),
+                    "role": str(roles_map[selected_role]),
                     "action": action,
-                    "channel": str(channels[selected_channel]),
+                    "channel": str(channels_map[selected_channel]),
                     "message": message
                 }
                 custom_rules.append(new_rule)
@@ -332,6 +376,7 @@ else:
         elif page == "Giveaway":
             st.title("🎉 Giveaway System")
             st.write("Konfiguriere das Embed für Giveaways.")
+            giveaway_enabled = st.checkbox("Giveaway aktivieren", value=settings.get("giveaway_enabled", False))
             
             giveaway_embed_title = st.text_input("Embed Titel", value=settings.get("giveaway_embed_title", "🎉 Giveaway!"))
             giveaway_embed_description = st.text_area("Embed Beschreibung", value=settings.get("giveaway_embed_description", "Gegenstand: {item}\nEndet in: {time}"))
@@ -339,6 +384,7 @@ else:
             giveaway_embed_footer = st.text_input("Embed Footer", value=settings.get("giveaway_embed_footer", "Klicke auf Teilnehmen!"))
             
             if st.button("Giveaway Embed speichern"):
+                settings["giveaway_enabled"] = giveaway_enabled
                 settings["giveaway_embed_title"] = giveaway_embed_title
                 settings["giveaway_embed_description"] = giveaway_embed_description
                 settings["giveaway_embed_color"] = giveaway_embed_color
@@ -349,6 +395,11 @@ else:
         elif page == "Ankündigungen":
             st.title("📢 Ankündigungen")
             st.write("Konfiguriere Embed für /ankündigen.")
+            announce_enabled = st.checkbox("Ankündigungen aktivieren", value=settings.get("announce_enabled", True))
+            channel_names = list(channels_map.keys())
+            current_announce_channel = settings.get("announce_channel_id", "")
+            ann_idx = index_for_value(channels_map, current_announce_channel)
+            announce_channel_name = st.selectbox("Ankündigungs-Channel", options=[""] + channel_names, index=(ann_idx + 1) if channel_names else 0)
             
             announce_embed_enabled = st.checkbox("Als Embed senden", value=settings.get("announce_embed_enabled", False))
             if announce_embed_enabled:
@@ -358,6 +409,8 @@ else:
                 announce_embed_footer = st.text_input("Embed Footer", value=settings.get("announce_embed_footer", "Gesendet von {user}"))
                 
                 if st.button("Ankündigung Embed speichern"):
+                    settings["announce_enabled"] = announce_enabled
+                    settings["announce_channel_id"] = channels_map.get(announce_channel_name) if announce_channel_name else settings.get("announce_channel_id")
                     settings["announce_embed_title"] = announce_embed_title
                     settings["announce_embed_description"] = announce_embed_description
                     settings["announce_embed_color"] = announce_embed_color
@@ -366,55 +419,87 @@ else:
                     st.success("Ankündigung Embed gespeichert!")
             else:
                 if st.button("Einstellung speichern"):
+                    settings["announce_enabled"] = announce_enabled
+                    settings["announce_channel_id"] = channels_map.get(announce_channel_name) if announce_channel_name else settings.get("announce_channel_id")
                     settings["announce_embed_enabled"] = announce_embed_enabled
                     save_settings(settings)
                     st.success("Gespeichert!")
 
+            if st.button("Ankündigung veröffentlichen"):
+                settings["announce_enabled"] = announce_enabled
+                settings["announce_channel_id"] = channels_map.get(announce_channel_name) if announce_channel_name else settings.get("announce_channel_id")
+                settings["announce_publish_trigger"] = True
+                save_settings(settings)
+                st.success("Ankündigung wird veröffentlicht.")
+
         elif page == "Reaction Roles":
             st.title("🔄 Reaction Roles")
             st.write("Erstelle Reaction Role Messages.")
+            reaction_roles_enabled = st.checkbox("Reaction Roles aktivieren", value=settings.get("reaction_roles_enabled", False))
+            rr_data = load_reaction_roles()
             
             st.subheader("Neue Reaction Role Nachricht")
-            channel = st.selectbox("Channel", options=[""] + list(discord_data.get("channels", {}).keys()))
+            channel = st.selectbox("Channel", options=[""] + list(channels_map.keys()))
             title = st.text_input("Embed Titel", "Wähle deine Rollen")
             description = st.text_area("Embed Beschreibung", "Reagiere mit Emojis um Rollen zu bekommen.")
             color = st.text_input("Embed Farbe (Hex)", "#8a2be2")
             
             st.subheader("Rollen zuweisen")
-            roles = discord_data.get("roles", {})
-            role_names = list(roles.keys())
+            role_names = list(roles_map.keys())
             emoji1 = st.text_input("Emoji 1", "🔴")
             role1 = st.selectbox("Rolle 1", options=[""] + role_names)
             emoji2 = st.text_input("Emoji 2", "🔵")
             role2 = st.selectbox("Rolle 2", options=[""] + role_names)
             # Mehr können hinzugefügt werden
             
+            async def _send_reaction_role(ch_id: int, embed: discord.Embed, emoji_role_map: dict):
+                # Runs in the bot event loop.
+                bot = st.session_state.get("bot")
+                if bot is None:
+                    return
+                chan = bot.get_channel(ch_id)
+                if chan is None:
+                    return
+                msg = await chan.send(embed=embed)
+                for emoji in emoji_role_map.keys():
+                    await msg.add_reaction(emoji)
+                rr_data[str(msg.id)] = emoji_role_map
+                save_reaction_roles(rr_data)
+                from database import add_reaction_role
+                await add_reaction_role(str(msg.id), json.dumps(emoji_role_map))
+
             if st.button("Reaction Role Nachricht senden"):
                 if channel and title:
-                    ch = discord_data["channels"][channel]
-                    embed = discord.Embed(title=title, description=description, color=int(color.lstrip("#"), 16))
-                    message = await st.session_state.bot.get_channel(int(ch)).send(embed=embed)
-                    # Reaktionen hinzufügen
+                    emoji_role_map = {}
                     if emoji1 and role1:
-                        await message.add_reaction(emoji1)
+                        emoji_role_map[emoji1] = str(roles_map[role1])
                     if emoji2 and role2:
-                        await message.add_reaction(emoji2)
-                    # Speichere in DB
-                    from database import add_reaction_role
-                    await add_reaction_role(str(message.id), json.dumps(rr_data[str(message.id)]))
-                    st.success("Reaction Role Nachricht gesendet!")
+                        emoji_role_map[emoji2] = str(roles_map[role2])
+
+                    bot = st.session_state.get("bot")
+                    if bot is None:
+                        st.error("Bot-Session nicht verfügbar. Nutze den Befehl im Discord oder verbinde den Bot mit dem Dashboard.")
+                    else:
+                        settings["reaction_roles_enabled"] = reaction_roles_enabled
+                        save_settings(settings)
+                        ch = int(channels_map[channel])
+                        embed = discord.Embed(title=title, description=description, color=int(color.lstrip("#"), 16))
+                        bot.loop.create_task(_send_reaction_role(ch, embed, emoji_role_map))
+                        st.success("Reaction Role Nachricht wird gesendet!")
                 else:
                     st.error("Channel und Titel erforderlich!")
 
         elif page == "Umfragen":
             st.title("📊 Umfragen")
             st.write("Konfiguriere Embed für /poll.")
+            polls_enabled = st.checkbox("Umfragen aktivieren", value=settings.get("polls_enabled", False))
             
             poll_embed_title = st.text_input("Embed Titel", value=settings.get("poll_embed_title", "📊 Umfrage"))
             poll_embed_color = st.text_input("Embed Farbe (Hex)", value=settings.get("poll_embed_color", "#8a2be2"))
             poll_embed_footer = st.text_input("Embed Footer", value=settings.get("poll_embed_footer", "Stimme ab!"))
             
             if st.button("Umfrage Embed speichern"):
+                settings["polls_enabled"] = polls_enabled
                 settings["poll_embed_title"] = poll_embed_title
                 settings["poll_embed_color"] = poll_embed_color
                 settings["poll_embed_footer"] = poll_embed_footer
@@ -426,7 +511,8 @@ else:
             st.write("Konfiguriere Sanktionen, Warnungen und Logs.")
             
             st.subheader("Sanktionen")
-            sanktion_role = st.selectbox("Sanktions-Rolle", options=[""] + list(discord_data.get("roles", {}).keys()))
+            moderation_enabled = st.checkbox("Moderation aktivieren", value=settings.get("management_enabled", True))
+            sanktion_role = st.selectbox("Sanktions-Rolle", options=[""] + list(roles_map.keys()))
             sanktion_embed_title = st.text_input("Sanktion Embed Titel", value=settings.get("sanktion_embed_title", "🚫 Sanktion"))
             sanktion_embed_description = st.text_area("Sanktion Embed Beschreibung", value=settings.get("sanktion_embed_description", "User: {user}\nBetrag: {betrag}\nGrund: {grund}\nDauer: {dauer} Tage"))
             sanktion_embed_color = st.text_input("Sanktion Embed Farbe (Hex)", value=settings.get("sanktion_embed_color", "#ff0000"))
@@ -439,10 +525,11 @@ else:
             warn_embed_footer = st.text_input("Warn Embed Footer", value=settings.get("warn_embed_footer", "Warnung erteilt"))
             
             st.subheader("Logs")
-            log_channel = st.selectbox("Moderation Log Channel", options=[""] + list(discord_data.get("channels", {}).keys()))
+            log_channel = st.selectbox("Moderation Log Channel", options=[""] + list(channels_map.keys()))
             
             if st.button("Moderation speichern"):
-                settings["sanktion_role_id"] = discord_data.get("roles", {}).get(sanktion_role)
+                settings["management_enabled"] = moderation_enabled
+                settings["sanktion_role_id"] = roles_map.get(sanktion_role)
                 settings["sanktion_embed_title"] = sanktion_embed_title
                 settings["sanktion_embed_description"] = sanktion_embed_description
                 settings["sanktion_embed_color"] = sanktion_embed_color
@@ -451,44 +538,32 @@ else:
                 settings["warn_embed_description"] = warn_embed_description
                 settings["warn_embed_color"] = warn_embed_color
                 settings["warn_embed_footer"] = warn_embed_footer
-                settings["moderation_log_channel"] = discord_data.get("channels", {}).get(log_channel)
+                settings["moderation_log_channel"] = channels_map.get(log_channel)
                 save_settings(settings)
                 st.success("Moderation gespeichert!")
 
         elif page == "Logging":
             st.title("📝 Logging")
             st.write("Konfiguriere erweiterte Logs.")
+            logging_enabled = st.checkbox("Logging aktivieren", value=settings.get("logging_enabled", True))
             
-            logging_channel = st.selectbox("Logging Channel", options=[""] + list(discord_data.get("channels", {}).keys()))
+            logging_channel = st.selectbox("Logging Channel", options=[""] + list(channels_map.keys()))
             
             if st.button("Logging speichern"):
-                settings["logging_channel_id"] = discord_data.get("channels", {}).get(logging_channel)
+                settings["logging_enabled"] = logging_enabled
+                settings["logging_channel_id"] = channels_map.get(logging_channel)
                 save_settings(settings)
                 st.success("Logging gespeichert!")
 
         elif page == "Einstellungen":
             st.title("⚙️ Allgemeine Einstellungen")
-            
-            st.subheader("Funktionen aktivieren/deaktivieren")
-            tickets_enabled = st.checkbox("Tickets aktivieren", value=settings.get("tickets_enabled", False))
-            stempeluhr_enabled = st.checkbox("Stempeluhr aktivieren", value=settings.get("stempeluhr_enabled", False))
-            automod_enabled = st.checkbox("Automod aktivieren", value=settings.get("automod_enabled", False))
-            custom_rules_enabled = st.checkbox("Wenn-Funktionen aktivieren", value=settings.get("custom_rules_enabled", False))
-            giveaway_enabled = st.checkbox("Giveaway aktivieren", value=settings.get("giveaway_enabled", False))
-            reaction_roles_enabled = st.checkbox("Reaction Roles aktivieren", value=settings.get("reaction_roles_enabled", False))
-            polls_enabled = st.checkbox("Umfragen aktivieren", value=settings.get("polls_enabled", False))
-            
+            st.subheader("Basis-Einstellungen")
+            automod_enabled = st.checkbox("Automod global aktivieren", value=settings.get("automod_enabled", False))
             st.subheader("Sonstige Einstellungen")
             bot_prefix = st.text_input("Bot Prefix", value=settings.get("prefix", "!"))
             
             if st.button("Speichern"):
-                settings["tickets_enabled"] = tickets_enabled
-                settings["stempeluhr_enabled"] = stempeluhr_enabled
                 settings["automod_enabled"] = automod_enabled
-                settings["custom_rules_enabled"] = custom_rules_enabled
-                settings["giveaway_enabled"] = giveaway_enabled
-                settings["reaction_roles_enabled"] = reaction_roles_enabled
-                settings["polls_enabled"] = polls_enabled
                 settings["prefix"] = bot_prefix
                 save_settings(settings)
                 st.success("Einstellungen gespeichert!")

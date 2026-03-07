@@ -36,7 +36,7 @@ class MyBot(commands.Bot):
         intents.guilds = True
         intents.reactions = True  # Für Reaction Roles
         super().__init__(command_prefix='!', intents=intents, help_command=None)
-        self.rate_limits = defaultdict(lambda: defaultdict(float))
+        self.rate_limits = defaultdict(float)
 
     def get_settings(self):
         # Cache settings
@@ -180,13 +180,7 @@ class MyBot(commands.Bot):
     async def cleanup_rate_limits(self):
         """Raeumt alte Rate-Limit-Eintraege auf."""
         now = time.time()
-        to_remove = []
-        for key, timestamps in self.rate_limits.items():
-            for cmd, ts in list(timestamps.items()):
-                if now - ts > 60:  # Remove entries older than 1 minute
-                    del timestamps[cmd]
-            if not timestamps:
-                to_remove.append(key)
+        to_remove = [key for key, ts in self.rate_limits.items() if now - ts > 60]
         for key in to_remove:
             del self.rate_limits[key]
 

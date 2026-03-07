@@ -66,9 +66,10 @@ class Automod(commands.Cog):
             self.message_counts[user_id][channel_id]["count"] = 0  # Reset
 
         # Caps-Lock Filter
-        caps_ratio = sum(1 for c in message.content if c.isupper()) / len(message.content) if message.content else 0
-        if caps_ratio > settings.get("automod_caps_threshold", 0.7) and len(message.content) > 10:
-            await self.handle_violation(message, "Caps Abuse", "Zu viele Großbuchstaben")
+        if settings.get("automod_caps_enabled", True):
+            caps_ratio = sum(1 for c in message.content if c.isupper()) / len(message.content) if message.content else 0
+            if caps_ratio > settings.get("automod_caps_threshold", 0.7) and len(message.content) > 10:
+                await self.handle_violation(message, "Caps Abuse", "Zu viele Großbuchstaben")
 
     async def handle_violation(self, message, reason, details):
         settings = self.bot.get_settings()
