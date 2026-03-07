@@ -38,6 +38,12 @@ st.markdown("""
                     linear-gradient(180deg, var(--as-bg-1) 0%, var(--as-bg-0) 80%);
         color: var(--as-text);
     }
+    [data-testid="stHeader"] {
+        display: none;
+    }
+    [data-testid="stToolbar"] {
+        display: none;
+    }
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #10192d 0%, #0e1628 100%);
         border-right: 1px solid rgba(255,255,255,0.08);
@@ -136,7 +142,7 @@ def render_brand_header():
             st.image("logo.jpg", width=72)
     with txt_col:
         st.markdown(
-            '<div class="brand-wrap"><p class="brand-title">ASWARD Control Center</p><p class="brand-sub">MEE6-inspired Bot Dashboard, angepasst auf eure GTA-RP Features.</p><span class="pill-ok">Live</span></div>',
+            '<div class="brand-wrap"><p class="brand-title">ASWARD Control Center</p><span class="pill-ok">Live</span></div>',
             unsafe_allow_html=True,
         )
 
