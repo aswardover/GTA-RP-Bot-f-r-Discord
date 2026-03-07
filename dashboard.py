@@ -17,7 +17,12 @@ DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
 DISCORD_USER_URL = "https://discord.com/api/users/@me"
 
 # --- STYLING (angepasst an Logo) ---
-st.set_page_config(page_title="GTA RP Bot Dashboard", page_icon="🎮", layout="wide")
+st.set_page_config(
+    page_title="GTA RP Bot Dashboard",
+    page_icon="🎮",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 st.markdown("""
     <style>
@@ -436,8 +441,31 @@ else:
             "Settings": "Einstellungen",
         }
 
-        page_choice = st.sidebar.radio("Navigation", list(page_map.keys()))
-        page = page_map[page_choice]
+        nav_options = list(page_map.keys())
+        if "active_page" not in st.session_state or st.session_state.active_page not in nav_options:
+            st.session_state.active_page = nav_options[0]
+
+        sidebar_choice = st.sidebar.radio(
+            "Navigation",
+            nav_options,
+            index=nav_options.index(st.session_state.active_page),
+            key="sidebar_nav_choice",
+        )
+        if sidebar_choice != st.session_state.active_page:
+            st.session_state.active_page = sidebar_choice
+
+        # Fallback navigation: remains usable even if sidebar is collapsed/hidden.
+        top_choice = st.radio(
+            "Schnellnavigation",
+            nav_options,
+            horizontal=True,
+            index=nav_options.index(st.session_state.active_page),
+            key="top_nav_choice",
+        )
+        if top_choice != st.session_state.active_page:
+            st.session_state.active_page = top_choice
+
+        page = page_map[st.session_state.active_page]
         st.sidebar.markdown("<span class='pill-ok'>System Online</span>", unsafe_allow_html=True)
         
         if st.sidebar.button("Abmelden"):
