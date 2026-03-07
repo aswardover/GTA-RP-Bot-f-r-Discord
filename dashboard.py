@@ -5,7 +5,7 @@ import os
 import requests
 import discord
 from urllib.parse import urlencode
-from config import SETTINGS_FILE, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DASHBOARD_REDIRECT_URI
+from config import SETTINGS_FILE, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DASHBOARD_REDIRECT_URI, TOKEN, GUILD_ID
 
 # --- KONFIGURATION ---
 DISCORD_DATA_FILE = "discord_data.json"
@@ -15,6 +15,7 @@ ADMIN_ID = "202768068617699328" # Deine Discord ID
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
 DISCORD_USER_URL = "https://discord.com/api/users/@me"
+DISCORD_API_BASE = "https://discord.com/api/v10"
 
 # --- STYLING (angepasst an Logo) ---
 st.set_page_config(page_title="GTA RP Bot Dashboard", page_icon="🎮", layout="wide")
@@ -59,6 +60,9 @@ st.markdown("""
     }
     [data-testid="stSidebar"] .stRadio label:hover {
         border-color: rgba(95,124,255,0.45);
+    }
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
+        color: var(--as-text);
     }
     .block-container {
         padding-top: 1rem;
@@ -170,6 +174,48 @@ def load_discord_data():
         with open(DISCORD_DATA_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {"channels": {}, "roles": {}, "categories": {}}
+
+def save_discord_data(data):
+    with open(DISCORD_DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+def sync_discord_data_from_api():
+    """Laedt aktuelle Channel/Rollen/Kategorien aus der Discord API in discord_data.json."""
+    if not TOKEN or TOKEN == "YOUR_BOT_TOKEN":
+        return False, "Bot-Token ist nicht konfiguriert."
+
+    headers = {"Authorization": f"Bot {TOKEN}"}
+
+    channels_resp = requests.get(f"{DISCORD_API_BASE}/guilds/{GUILD_ID}/channels", headers=headers, timeout=15)
+    if channels_resp.status_code != 200:
+        return False, f"Channel Sync fehlgeschlagen ({channels_resp.status_code})."
+    channels_raw = channels_resp.json()
+
+    roles_resp = requests.get(f"{DISCORD_API_BASE}/guilds/{GUILD_ID}/roles", headers=headers, timeout=15)
+    if roles_resp.status_code != 200:
+        return False, f"Role Sync fehlgeschlagen ({roles_resp.status_code})."
+    roles_raw = roles_resp.json()
+
+    categories = {}
+    for ch in channels_raw:
+        if ch.get("type") == 4:  # category
+            categories[ch["name"]] = str(ch["id"])
+
+    channels = {}
+    for ch in channels_raw:
+        ch_type = ch.get("type")
+        if ch_type == 0:  # text
+            channels[f"#{ch['name']}"] = str(ch["id"])
+        elif ch_type == 2:  # voice
+            channels[f"🔊 {ch['name']}"] = str(ch["id"])
+
+    roles = {}
+    for role in roles_raw:
+        if role.get("name") != "@everyone":
+            roles[role["name"]] = str(role["id"])
+
+    save_discord_data({"channels": channels, "roles": roles, "categories": categories})
+    return True, f"Sync erfolgreich: {len(channels)} Channels, {len(roles)} Rollen, {len(categories)} Kategorien."
 
 def normalize_named_mapping(raw):
     """Normalisiert Discord-Daten auf Name->ID Mapping (dict), auch wenn Listen gespeichert wurden."""
@@ -364,6 +410,13 @@ else:
         render_brand_header()
         st.sidebar.markdown("### ASWARD Modules")
         st.sidebar.caption("Steuere alle Bot-Systeme zentral")
+        if st.sidebar.button("Discord-Daten synchronisieren"):
+            ok, msg = sync_discord_data_from_api()
+            if ok:
+                st.sidebar.success(msg)
+                st.rerun()
+            else:
+                st.sidebar.error(msg)
         settings = load_settings()
         discord_data = load_discord_data()
         channels_map = normalize_named_mapping(discord_data.get("channels", {}))
@@ -390,7 +443,7 @@ else:
         page_map = {
             "Overview": "Übersicht",
             "Tickets": "Tickets",
-            "Time Clock": "Stempeluhr",
+            "Stempeluhr": "Stempeluhr",
             "Auto Mod": "Automod",
             "If Rules": "Wenn-Funktionen",
             "Giveaway": "Giveaway",
@@ -402,7 +455,7 @@ else:
             "Settings": "Einstellungen",
         }
 
-        page_choice = st.sidebar.radio("Navigation", list(page_map.keys()))
+        page_choice = st.sidebar.selectbox("Navigation", list(page_map.keys()))
         page = page_map[page_choice]
         st.sidebar.markdown("<span class='pill-ok'>System Online</span>", unsafe_allow_html=True)
         
