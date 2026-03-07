@@ -104,7 +104,13 @@ class MyBot(commands.Bot):
                         if channel:
                             title = settings.get('tickets_panel_title', 'Support-Ticket')
                             categories = settings.get('tickets_categories', [])
-                            desc = '\n'.join([f'• {c}' for c in categories]) if categories else 'Klicke auf den Button um ein Ticket zu eroeffnen.'
+                            category_labels = []
+                            for c in categories:
+                                if isinstance(c, dict):
+                                    category_labels.append(str(c.get('name') or c.get('category_channel_id') or 'Kategorie'))
+                                else:
+                                    category_labels.append(str(c))
+                            desc = '\n'.join([f'• {label}' for label in category_labels]) if category_labels else 'Klicke auf den Button um ein Ticket zu eroeffnen.'
                             embed = discord.Embed(
                                 title=f'🎫 {title}',
                                 description=desc,

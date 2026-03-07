@@ -185,8 +185,72 @@ def normalize_named_mapping(raw):
                     result[str(name)] = str(value)
             elif isinstance(item, (list, tuple)) and len(item) == 2:
                 result[str(item[0])] = str(item[1])
+            elif isinstance(item, (str, int)):
+                value = str(item)
+                if value:
+                    result[f"ID {value}"] = value
         return result
     return {}
+
+def add_ids_from_settings(mapping, settings, keys, label_prefix):
+    """Fuegt bekannte IDs aus settings hinzu, damit Dropdowns auch ohne discord_data nutzbar sind."""
+    enriched = dict(mapping)
+    existing_values = set(str(v) for v in enriched.values())
+    for key in keys:
+        value = settings.get(key)
+        if value is None:
+            continue
+        value_str = str(value).strip()
+        if not value_str:
+            continue
+        if value_str not in existing_values:
+            enriched[f"{label_prefix}: {key} ({value_str})"] = value_str
+            existing_values.add(value_str)
+    return enriched
+
+def extract_ticket_category_names(raw_categories, categories_mapping):
+    """Extrahiert Category-Namen fuer Multiselect (kompatibel mit alter und neuer Struktur)."""
+    if not isinstance(raw_categories, list):
+        return []
+    reverse_map = {str(v): k for k, v in categories_mapping.items()}
+    names = []
+    for item in raw_categories:
+        if isinstance(item, str):
+            if item in categories_mapping:
+                names.append(item)
+            elif item in reverse_map:
+                names.append(reverse_map[item])
+        elif isinstance(item, dict):
+            category_id = item.get("category_channel_id")
+            name = item.get("name")
+            if category_id is not None and str(category_id) in reverse_map:
+                names.append(reverse_map[str(category_id)])
+            elif name and name in categories_mapping:
+                names.append(name)
+    return list(dict.fromkeys(names))
+
+def add_ticket_categories_from_settings(categories_mapping, settings):
+    """Ergaenzt Kategorien aus tickets_categories in die Auswahl (falls keine discord_data Kategorien vorliegen)."""
+    enriched = dict(categories_mapping)
+    existing_values = set(str(v) for v in enriched.values())
+    raw_categories = settings.get("tickets_categories", [])
+    if not isinstance(raw_categories, list):
+        return enriched
+
+    for item in raw_categories:
+        if isinstance(item, dict):
+            category_id = item.get("category_channel_id")
+            name = item.get("name") or "Kategorie"
+            if category_id is None:
+                continue
+            category_id_str = str(category_id)
+            if category_id_str not in existing_values:
+                enriched[f"{name} ({category_id_str})"] = category_id_str
+                existing_values.add(category_id_str)
+        elif isinstance(item, str):
+            if item not in enriched:
+                enriched[item] = item
+    return enriched
 
 def index_for_value(mapping, current_value):
     if not mapping:
@@ -202,34 +266,22 @@ def render_page_header(title, subtitle):
     st.markdown(f"<p class='section-sub'>{subtitle}</p>", unsafe_allow_html=True)
 
 def select_channel_id(label, channels_mapping, current_value, key_prefix):
-    """Returns a channel ID string, using dropdown when names exist and manual fallback always."""
+    """Returns a channel ID string from dropdown options."""
     channel_names = list(channels_mapping.keys())
-    selected_id = None
-    default_manual = str(current_value or "")
+    if not channel_names:
+        st.warning("Keine Channel-Daten verfuegbar. Bitte zuerst Discord-Daten synchronisieren.")
+        return None
 
-    if channel_names:
-        def_idx = index_for_value(channels_mapping, current_value)
-        selected_name = st.selectbox(
-            label,
-            options=[""] + channel_names,
-            index=(def_idx + 1) if channel_names else 0,
-            key=f"{key_prefix}_name",
-        )
-        if selected_name:
-            selected_id = str(channels_mapping.get(selected_name))
-            default_manual = selected_id
-    else:
-        st.info("Keine Channel-Liste gefunden. Du kannst die Channel-ID manuell eintragen.")
-
-    manual_id = st.text_input(
-        "Channel ID (manuell)",
-        value=default_manual,
-        key=f"{key_prefix}_manual",
-    ).strip()
-
-    if manual_id:
-        return manual_id
-    return selected_id
+    def_idx = index_for_value(channels_mapping, current_value)
+    selected_name = st.selectbox(
+        label,
+        options=[""] + channel_names,
+        index=(def_idx + 1) if channel_names else 0,
+        key=f"{key_prefix}_name",
+    )
+    if selected_name:
+        return str(channels_mapping.get(selected_name))
+    return None
 
 # --- OAUTH2 HILFSFUNKTIONEN ---
 def get_discord_auth_url():
@@ -315,8 +367,24 @@ else:
         settings = load_settings()
         discord_data = load_discord_data()
         channels_map = normalize_named_mapping(discord_data.get("channels", {}))
+        channels_map = add_ids_from_settings(
+            channels_map,
+            settings,
+            [
+                "ticket_channel_id",
+                "tickets_panel_channel_id",
+                "stempeluhr_panel_channel_id",
+                "announce_channel_id",
+                "automod_log_channel",
+                "moderation_log_channel",
+                "logging_channel_id",
+            ],
+            "Channel",
+        )
         roles_map = normalize_named_mapping(discord_data.get("roles", {}))
         categories_map = normalize_named_mapping(discord_data.get("categories", {}))
+        categories_map = add_ids_from_settings(categories_map, settings, ["ticket_category_id"], "Kategorie")
+        categories_map = add_ticket_categories_from_settings(categories_map, settings)
         
         # Navigation immer vollständig anzeigen; Aktivierung erfolgt im jeweiligen Reiter.
         page_map = {
@@ -366,7 +434,18 @@ else:
             ticket_channel_id = select_channel_id("Ticket Panel Channel", channels_map, current_ticket_channel, "tickets_panel")
 
             category_names = list(categories_map.keys())
-            selected_categories = st.multiselect("Ticket Kategorien", options=category_names, default=settings.get("tickets_categories", []))
+            selected_category_names = st.multiselect(
+                "Ticket Kategorien",
+                options=category_names,
+                default=extract_ticket_category_names(settings.get("tickets_categories", []), categories_map),
+            )
+            selected_categories = [
+                {
+                    "name": category_name,
+                    "category_channel_id": int(categories_map[category_name]) if str(categories_map[category_name]).isdigit() else categories_map[category_name],
+                }
+                for category_name in selected_category_names
+            ]
 
             if st.button("Ticket Einstellungen speichern"):
                 settings["tickets_enabled"] = tickets_enabled
