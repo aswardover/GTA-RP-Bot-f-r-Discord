@@ -4,6 +4,7 @@ import json
 import os
 import requests
 import discord
+from urllib.parse import urlencode
 from config import SETTINGS_FILE, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DASHBOARD_REDIRECT_URI
 
 # --- KONFIGURATION ---
@@ -20,51 +21,124 @@ st.set_page_config(page_title="GTA RP Bot Dashboard", page_icon="🎮", layout="
 
 st.markdown("""
     <style>
-    .main {
-        background-color: #0f0f0f;
+    :root {
+        --as-bg-0: #0b0f1c;
+        --as-bg-1: #12192b;
+        --as-panel: #161f33;
+        --as-panel-soft: #1b2540;
+        --as-text: #f5f8ff;
+        --as-muted: #a8b3cf;
+        --as-accent: #5f7cff;
+        --as-accent-2: #7a4dff;
+        --as-ok: #3bd39a;
+    }
+    .stApp {
+        background: radial-gradient(1200px 500px at 85% -20%, rgba(95,124,255,0.35), transparent),
+                    radial-gradient(900px 350px at 10% -10%, rgba(122,77,255,0.25), transparent),
+                    linear-gradient(180deg, var(--as-bg-1) 0%, var(--as-bg-0) 80%);
+        color: var(--as-text);
+    }
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #10192d 0%, #0e1628 100%);
+        border-right: 1px solid rgba(255,255,255,0.08);
+    }
+    [data-testid="stSidebar"] .stRadio > div {
+        gap: 0.25rem;
+    }
+    [data-testid="stSidebar"] .stRadio label {
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.03);
+        border-radius: 10px;
+        padding: 0.35rem 0.6rem;
+    }
+    [data-testid="stSidebar"] .stRadio label:hover {
+        border-color: rgba(95,124,255,0.45);
+    }
+    .block-container {
+        padding-top: 1rem;
+    }
+    .stButton > button {
+        background: linear-gradient(90deg, var(--as-accent-2), var(--as-accent));
         color: #ffffff;
+        border-radius: 10px;
+        border: 0;
+        padding: 0.48rem 0.95rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
     }
-    .stButton>button {
-        background-color: #8a2be2;
-        color: white;
-        border-radius: 5px;
-        border: none;
-        padding: 10px 20px;
-        font-weight: bold;
+    .stButton > button:hover {
+        filter: brightness(1.08);
+        transform: translateY(-1px);
     }
-    .stButton>button:hover {
-        background-color: #6a1cb0;
-        border: none;
-        color: white;
-    }
-    .stTextInput>div>div>input {
-        background-color: #1a1a1a;
-        color: white;
-        border: 1px solid #333333;
-    }
-    .sidebar .sidebar-content {
-        background-color: #1a1a1a;
+    .stTextInput input,
+    .stTextArea textarea,
+    .stSelectbox div[data-baseweb="select"] > div,
+    .stMultiSelect div[data-baseweb="select"] > div,
+    .stNumberInput input {
+        background: var(--as-panel-soft);
+        color: var(--as-text);
+        border-color: rgba(255,255,255,0.12);
     }
     div[data-testid="stMetricValue"] {
-        color: #8a2be2;
+        color: #93a6ff;
     }
     .status-card {
-        background-color: #1a1a1a;
-        color: #ffffff;
-        padding: 20px;
-        border-radius: 10px;
-        border-left: 5px solid #8a2be2;
-        margin-bottom: 10px;
+        background: linear-gradient(135deg, rgba(95,124,255,0.18), rgba(122,77,255,0.16));
+        border: 1px solid rgba(255,255,255,0.14);
+        color: var(--as-text);
+        padding: 16px;
+        border-radius: 14px;
+        margin-bottom: 14px;
     }
-    .logo {
-        text-align: center;
-        margin-bottom: 20px;
+    .brand-wrap {
+        border: 1px solid rgba(255,255,255,0.10);
+        background: rgba(255,255,255,0.03);
+        border-radius: 14px;
+        padding: 12px 14px;
+        margin-bottom: 12px;
+    }
+    .brand-title {
+        font-size: 1.35rem;
+        font-weight: 800;
+        color: var(--as-text);
+        margin: 0;
+    }
+    .brand-sub {
+        color: var(--as-muted);
+        margin-top: 2px;
+        font-size: 0.92rem;
+    }
+    .pill-ok {
+        display: inline-block;
+        background: rgba(59,211,154,0.18);
+        color: #7df2c1;
+        border: 1px solid rgba(59,211,154,0.28);
+        border-radius: 999px;
+        font-size: 0.78rem;
+        padding: 0.12rem 0.55rem;
+        margin-top: 0.25rem;
+    }
+    .section-title {
+        margin-bottom: 0.1rem;
+    }
+    .section-sub {
+        color: var(--as-muted);
+        margin-top: 0;
+        margin-bottom: 1rem;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOGO ---
-st.markdown('<div class="logo"><img src="https://cdn.discordapp.com/attachments/1317606543952183367/1479593240884805794/oVer.png?ex=69ac9a16&is=69ab4896&hm=e46c698ec82f7ab40b02d1b266cb4d9a69d94d8b3831122b31e46a87c84d8f3e&" width="200"></div>', unsafe_allow_html=True)
+def render_brand_header():
+    logo_col, txt_col = st.columns([1, 8])
+    with logo_col:
+        if os.path.exists("logo.jpg"):
+            st.image("logo.jpg", width=72)
+    with txt_col:
+        st.markdown(
+            '<div class="brand-wrap"><p class="brand-title">ASWARD Control Center</p><p class="brand-sub">MEE6-inspired Bot Dashboard, angepasst auf eure GTA-RP Features.</p><span class="pill-ok">Live</span></div>',
+            unsafe_allow_html=True,
+        )
 
 def load_reaction_roles():
     if os.path.exists("reaction_roles.json"):
@@ -117,6 +191,10 @@ def index_for_value(mapping, current_value):
             return i
     return 0
 
+def render_page_header(title, subtitle):
+    st.markdown(f"<h2 class='section-title'>{title}</h2>", unsafe_allow_html=True)
+    st.markdown(f"<p class='section-sub'>{subtitle}</p>", unsafe_allow_html=True)
+
 # --- OAUTH2 HILFSFUNKTIONEN ---
 def get_discord_auth_url():
     params = {
@@ -125,7 +203,7 @@ def get_discord_auth_url():
         "response_type": "code",
         "scope": "identify"
     }
-    url = DISCORD_AUTH_URL + "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+    url = DISCORD_AUTH_URL + "?" + urlencode(params)
     return url
 
 def exchange_code_for_token(code):
@@ -154,9 +232,7 @@ if "access_token" not in st.session_state:
 
 # --- LOGIN LOGIK ---
 def login_form():
-    st.title("🔒 Dashboard Login")
-    
-    st.info("Logge dich mit deinem Discord Account ein.")
+    render_page_header("Discord Login", "Melde dich mit deinem Discord Account an, um das Dashboard zu verwalten.")
     
     auth_url = get_discord_auth_url()
     st.markdown(f'[Mit Discord anmelden]({auth_url})')
@@ -179,13 +255,15 @@ def login_form():
 
 # --- HAUPTTEIL ---
 if not st.session_state.logged_in:
+    render_brand_header()
     login_form()
 else:
     # Check Admin Status
     is_admin = st.session_state.user_id == ADMIN_ID
     
     if not is_admin:
-        st.title("🚧 Zugriff verweigert")
+        render_brand_header()
+        render_page_header("Zugriff verweigert", "Dieser Account hat aktuell keine Dashboard-Berechtigung.")
         st.error("Du kannst aktuell nicht auf diese Seite zugreifen")
         st.info(f"Eingeloggt als: {st.session_state.user_id}")
         if st.button("Abmelden"):
@@ -195,7 +273,9 @@ else:
             st.rerun()
     else:
         # ADMIN DASHBOARD
-        st.sidebar.title("🎮 Bot Control Panel")
+        render_brand_header()
+        st.sidebar.markdown("### ASWARD Modules")
+        st.sidebar.caption("Steuere alle Bot-Systeme zentral")
         settings = load_settings()
         discord_data = load_discord_data()
         channels_map = normalize_named_mapping(discord_data.get("channels", {}))
@@ -203,29 +283,31 @@ else:
         categories_map = normalize_named_mapping(discord_data.get("categories", {}))
         
         # Navigation immer vollständig anzeigen; Aktivierung erfolgt im jeweiligen Reiter.
-        pages = [
-            "Übersicht",
-            "Tickets",
-            "Stempeluhr",
-            "Automod",
-            "Wenn-Funktionen",
-            "Giveaway",
-            "Ankündigungen",
-            "Reaction Roles",
-            "Umfragen",
-            "Moderation",
-            "Logging",
-            "Einstellungen",
-        ]
-        
-        page = st.sidebar.radio("Navigation", pages)
+        page_map = {
+            "Overview": "Übersicht",
+            "Tickets": "Tickets",
+            "Time Clock": "Stempeluhr",
+            "Auto Mod": "Automod",
+            "If Rules": "Wenn-Funktionen",
+            "Giveaway": "Giveaway",
+            "Announcements": "Ankündigungen",
+            "Reaction Roles": "Reaction Roles",
+            "Polls": "Umfragen",
+            "Moderation": "Moderation",
+            "Logging": "Logging",
+            "Settings": "Einstellungen",
+        }
+
+        page_choice = st.sidebar.radio("Navigation", list(page_map.keys()))
+        page = page_map[page_choice]
+        st.sidebar.markdown("<span class='pill-ok'>System Online</span>", unsafe_allow_html=True)
         
         if st.sidebar.button("Abmelden"):
             st.session_state.logged_in = False
             st.rerun()
         
         if page == "Übersicht":
-            st.title("📊 Bot Übersicht")
+            render_page_header("Bot Übersicht", "Schneller MEE6-Style Überblick über Status und Kernmetriken.")
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Status", "Online", delta="Aktiv")
@@ -234,12 +316,11 @@ else:
             with col3:
                 st.metric("Tickets", settings.get("ticket_count", 0))
             
-            st.markdown("### 🔔 Letzte Aktivitäten")
+            st.markdown("### Letzte Aktivitäten")
             st.markdown('<div class="status-card">Bot erfolgreich gestartet. Alle Systeme laufen nominal.</div>', unsafe_allow_html=True)
 
         elif page == "Tickets":
-            st.title("🎫 Ticket System")
-            st.write("Konfiguriere hier die Ticket-Einstellungen.")
+            render_page_header("Ticket System", "Panel, Kategorien und Ticket-Aktivierung konfigurieren.")
             tickets_enabled = st.checkbox("Tickets aktivieren", value=settings.get("tickets_enabled", False))
             
             st.subheader("Channel & Kategorien")
@@ -270,8 +351,7 @@ else:
                 st.success("Ticket Panel wird veröffentlicht.")
 
         elif page == "Stempeluhr":
-            st.title("🕐 Stempeluhr System")
-            st.write("Berechtigungen und Logs für die Stempeluhr.")
+            render_page_header("Stempeluhr System", "Berechtigungen und Panel-Channel für die Zeit-Erfassung.")
             stempeluhr_enabled = st.checkbox("Stempeluhr aktivieren", value=settings.get("stempeluhr_enabled", False))
             
             role_names = list(roles_map.keys())
@@ -303,8 +383,7 @@ else:
                 st.success("Stempeluhr Panel wird veröffentlicht.")
 
         elif page == "Automod":
-            st.title("🤖 Automod System")
-            st.write("Konfiguriere automatische Moderation.")
+            render_page_header("Automod", "Schütze den Server mit Spam-, Caps- und Wortfiltern.")
             
             automod_enabled = st.checkbox("Automod aktivieren", value=settings.get("automod_enabled", False))
             banned_words = st.text_area("Verbotene Wörter (kommasepariert)", value=", ".join(settings.get("automod_banned_words", [])))
@@ -333,8 +412,7 @@ else:
                 st.success("Automod-Einstellungen gespeichert!")
 
         elif page == "Wenn-Funktionen":
-            st.title("🔀 Wenn-Funktionen")
-            st.write("Definiere bedingte Aktionen, z.B. bei Rollenänderungen.")
+            render_page_header("Wenn-Funktionen", "Eventbasierte Regeln fuer Rollen-Events und Auto-Aktionen.")
             
             custom_rules = settings.get("custom_rules", [])
             
@@ -374,8 +452,7 @@ else:
                     st.rerun()
 
         elif page == "Giveaway":
-            st.title("🎉 Giveaway System")
-            st.write("Konfiguriere das Embed für Giveaways.")
+            render_page_header("Giveaway", "Passe das Giveaway-Embed im gewohnten Control-Center Stil an.")
             giveaway_enabled = st.checkbox("Giveaway aktivieren", value=settings.get("giveaway_enabled", False))
             
             giveaway_embed_title = st.text_input("Embed Titel", value=settings.get("giveaway_embed_title", "🎉 Giveaway!"))
@@ -393,8 +470,7 @@ else:
                 st.success("Giveaway Embed gespeichert!")
 
         elif page == "Ankündigungen":
-            st.title("📢 Ankündigungen")
-            st.write("Konfiguriere Embed für /ankündigen.")
+            render_page_header("Ankuendigungen", "Steuere Channel, Embed-Layout und Publishing fuer Ankuendigungen.")
             announce_enabled = st.checkbox("Ankündigungen aktivieren", value=settings.get("announce_enabled", True))
             channel_names = list(channels_map.keys())
             current_announce_channel = settings.get("announce_channel_id", "")
@@ -433,8 +509,7 @@ else:
                 st.success("Ankündigung wird veröffentlicht.")
 
         elif page == "Reaction Roles":
-            st.title("🔄 Reaction Roles")
-            st.write("Erstelle Reaction Role Messages.")
+            render_page_header("Reaction Roles", "Baue selbsterklaerende Rollen-Panels mit Emoji-Zuordnung.")
             reaction_roles_enabled = st.checkbox("Reaction Roles aktivieren", value=settings.get("reaction_roles_enabled", False))
             rr_data = load_reaction_roles()
             
@@ -490,8 +565,7 @@ else:
                     st.error("Channel und Titel erforderlich!")
 
         elif page == "Umfragen":
-            st.title("📊 Umfragen")
-            st.write("Konfiguriere Embed für /poll.")
+            render_page_header("Umfragen", "Definiere Titel, Farbe und Footer fuer Poll-Embeds.")
             polls_enabled = st.checkbox("Umfragen aktivieren", value=settings.get("polls_enabled", False))
             
             poll_embed_title = st.text_input("Embed Titel", value=settings.get("poll_embed_title", "📊 Umfrage"))
@@ -507,8 +581,7 @@ else:
                 st.success("Umfrage Embed gespeichert!")
 
         elif page == "Moderation":
-            st.title("🛡️ Moderation")
-            st.write("Konfiguriere Sanktionen, Warnungen und Logs.")
+            render_page_header("Moderation", "Sanktions-, Warn- und Log-Templates zentral verwalten.")
             
             st.subheader("Sanktionen")
             moderation_enabled = st.checkbox("Moderation aktivieren", value=settings.get("management_enabled", True))
@@ -543,8 +616,7 @@ else:
                 st.success("Moderation gespeichert!")
 
         elif page == "Logging":
-            st.title("📝 Logging")
-            st.write("Konfiguriere erweiterte Logs.")
+            render_page_header("Logging", "Aktiviere Logging und ordne den Ziel-Channel zu.")
             logging_enabled = st.checkbox("Logging aktivieren", value=settings.get("logging_enabled", True))
             
             logging_channel = st.selectbox("Logging Channel", options=[""] + list(channels_map.keys()))
@@ -556,7 +628,7 @@ else:
                 st.success("Logging gespeichert!")
 
         elif page == "Einstellungen":
-            st.title("⚙️ Allgemeine Einstellungen")
+            render_page_header("Allgemeine Einstellungen", "Globale Basiswerte fuer Prefix und Kern-Module.")
             st.subheader("Basis-Einstellungen")
             automod_enabled = st.checkbox("Automod global aktivieren", value=settings.get("automod_enabled", False))
             st.subheader("Sonstige Einstellungen")
