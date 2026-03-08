@@ -11,6 +11,12 @@ from embeds import success_embed, error_embed
 DATA_FILE = "stempeluhr_data.json"
 
 # ─── HILFSFUNKTIONEN ──────────────────────────────────────────────
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
@@ -288,6 +294,10 @@ class Stempeluhr(commands.Cog):
             embed.set_footer(text="GTA-RP Zeiterfassung")
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="stempelliste", description="Alle Stempelzeiten anzeigen (Admin)")
+    async def stempel_liste_alias(self, interaction: discord.Interaction):
+        await self.stempel_liste(interaction)
 
 async def setup(bot):
     await bot.add_cog(Stempeluhr(bot))

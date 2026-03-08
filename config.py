@@ -19,5 +19,6 @@ LOGO_FILE = 'logo.jpg'
 COLOR_PRIMARY = 0x38bdf8
 COLOR_SUCCESS = 0x22c55e
 COLOR_ERROR = 0xef4444
+COLOR_WARNING = 0xf59e0b
 # Backward compatibility for modules using COLOR_INFO.
 COLOR_INFO = COLOR_PRIMARY

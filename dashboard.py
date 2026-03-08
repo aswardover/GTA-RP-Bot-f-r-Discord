@@ -384,6 +384,17 @@ def select_channel_id(label, channels_mapping, current_value, key_prefix):
     return selected_id
 
 # --- OAUTH2 HILFSFUNKTIONEN ---
+def oauth_is_configured():
+    client_id = str(DISCORD_CLIENT_ID or "").strip()
+    client_secret = str(DISCORD_CLIENT_SECRET or "").strip()
+    if not client_id or client_id.startswith("YOUR_"):
+        return False
+    if not client_secret or client_secret.startswith("YOUR_"):
+        return False
+    if not client_id.isdigit():
+        return False
+    return True
+
 def get_discord_auth_url():
     params = {
         "client_id": DISCORD_CLIENT_ID,
@@ -421,6 +432,20 @@ if "access_token" not in st.session_state:
 # --- LOGIN LOGIK ---
 def login_form():
     render_page_header("Discord Login", "Melde dich mit deinem Discord Account an, um das Dashboard zu verwalten.")
+
+    if not oauth_is_configured():
+        st.error("Discord OAuth ist nicht korrekt konfiguriert (DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET).")
+        st.code(
+            "sudo systemctl edit gta-dashboard --full\n"
+            "# Unter [Service] setzen:\n"
+            "Environment=\"DISCORD_CLIENT_ID=<deine_client_id>\"\n"
+            "Environment=\"DISCORD_CLIENT_SECRET=<dein_client_secret>\"\n"
+            "Environment=\"DASHBOARD_REDIRECT_URI=https://asward-helper.store\"\n"
+            "sudo systemctl daemon-reload\n"
+            "sudo systemctl restart gta-dashboard",
+            language="bash",
+        )
+        return
     
     auth_url = get_discord_auth_url()
     st.markdown(f'[Mit Discord anmelden]({auth_url})')
