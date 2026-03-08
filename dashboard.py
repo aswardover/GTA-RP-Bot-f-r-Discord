@@ -390,6 +390,34 @@ def select_channel_id(label, channels_mapping, current_value, key_prefix):
         return manual_id
     return selected_id
 
+def select_category_id(label, categories_mapping, current_value, key_prefix):
+    """Returns a category ID string from dropdown options with manual fallback."""
+    category_names = list(categories_mapping.keys())
+    current_str = str(current_value).strip() if current_value is not None else ""
+    selected_id = current_str or None
+
+    if category_names:
+        def_idx = index_for_value(categories_mapping, current_value)
+        selected_name = st.selectbox(
+            label,
+            options=[""] + category_names,
+            index=(def_idx + 1) if category_names else 0,
+            key=f"{key_prefix}_name",
+        )
+        if selected_name:
+            selected_id = str(categories_mapping.get(selected_name))
+    else:
+        st.warning("Keine Kategorien verfuegbar. Nutze die Fallback-ID.")
+
+    manual_id = st.text_input(
+        f"{label} ID (Fallback)",
+        value=selected_id or "",
+        key=f"{key_prefix}_manual_id",
+    ).strip()
+    if manual_id:
+        return manual_id
+    return selected_id
+
 # --- OAUTH2 HILFSFUNKTIONEN ---
 def oauth_is_configured():
     client_id = str(DISCORD_CLIENT_ID or "").strip()
@@ -587,65 +615,105 @@ else:
             st.markdown('<div class="status-card">Bot erfolgreich gestartet. Alle Systeme laufen nominal.</div>', unsafe_allow_html=True)
 
         elif page == "Tickets":
-            render_page_header("Ticket System", "Panel, Kategorien und Ticket-Aktivierung konfigurieren.")
+            render_page_header("Ticket System", "MEE6-Style Ticket-Konfiguration mit Optionen, Kategorien, Manager-Rollen und Transcript.")
             tickets_enabled = st.checkbox("Tickets aktivieren", value=settings.get("tickets_enabled", False))
-            
-            st.subheader("Channel & Kategorien")
-            
-            # Channel Auswahl
-            current_ticket_channel = settings.get("tickets_panel_channel_id", settings.get("ticket_channel_id", ""))
-            ticket_channel_id = select_channel_id("Ticket Panel Channel", channels_map, current_ticket_channel, "tickets_panel")
 
-            category_names = list(categories_map.keys())
-            selected_categories = []
-            if category_names:
-                selected_category_names = st.multiselect(
-                    "Ticket Kategorien",
-                    options=category_names,
-                    default=extract_ticket_category_names(settings.get("tickets_categories", []), categories_map),
-                )
-                selected_categories.extend([
-                    {
-                        "name": category_name,
-                        "category_channel_id": int(categories_map[category_name]) if str(categories_map[category_name]).isdigit() else categories_map[category_name],
-                    }
-                    for category_name in selected_category_names
-                ])
-            else:
-                st.info("Keine Kategorien geladen. Du kannst unten IDs manuell eintragen.")
+            st.subheader("Allgemein")
+            panel_channel_id = select_channel_id(
+                "Kanal veroeffentlichen",
+                channels_map,
+                settings.get("tickets_panel_channel_id", settings.get("ticket_channel_id", "")),
+                "tickets_panel",
+            )
+            panel_mode = st.radio(
+                "Panel-Modus",
+                ["buttons", "dropdown"],
+                index=0 if settings.get("tickets_panel_mode", "buttons") == "buttons" else 1,
+                horizontal=True,
+            )
+            panel_title = st.text_input("Panel Titel", value=settings.get("tickets_panel_title", "🎫 Ticket-System"))
+            panel_description = st.text_area(
+                "Panel Beschreibung",
+                value=settings.get("tickets_panel_description", "Waehle eine Option, um ein Ticket zu erstellen."),
+            )
 
-            manual_ticket_categories = parse_id_list(
+            st.subheader("Ticket Manager-Rollen")
+            manager_defaults = names_for_ids(roles_map, settings.get("tickets_manager_roles", []))
+            manager_role_names = st.multiselect("Rollen mit Zugriff auf Claim/Close", options=list(roles_map.keys()), default=manager_defaults)
+            manager_role_ids_manual = parse_id_list(
                 st.text_input(
-                    "Ticket Kategorie IDs (Fallback, komma-separiert)",
-                    value=", ".join([
-                        str(c.get("category_channel_id"))
-                        for c in settings.get("tickets_categories", [])
-                        if isinstance(c, dict) and c.get("category_channel_id") is not None
-                    ]),
-                    key="tickets_categories_manual",
+                    "Manager Rollen IDs (Fallback, komma-separiert)",
+                    value=", ".join([str(x) for x in settings.get("tickets_manager_roles", [])]),
+                    key="tickets_manager_roles_manual",
                 )
             )
-            known_cat_ids = {str(c.get("category_channel_id")) for c in selected_categories}
-            for cat_id in manual_ticket_categories:
-                if cat_id in known_cat_ids:
-                    continue
-                selected_categories.append({"name": f"Kategorie {cat_id}", "category_channel_id": int(cat_id) if cat_id.isdigit() else cat_id})
+
+            st.subheader("Kategorien fuer Ticket-Status")
+            open_category_id = select_category_id("Kategorie fuer erstellte Tickets", categories_map, settings.get("tickets_open_category_id"), "tickets_open_category")
+            claimed_category_id = select_category_id("Kategorie fuer beanspruchte Tickets", categories_map, settings.get("tickets_claimed_category_id"), "tickets_claimed_category")
+            closed_category_id = select_category_id("Kategorie fuer geschlossene Tickets", categories_map, settings.get("tickets_closed_category_id"), "tickets_closed_category")
+            delete_on_close = st.checkbox("Ticket-Kanal nach Schliessen loeschen", value=settings.get("tickets_delete_on_close", True))
+
+            st.subheader("Ticket-Transkripte")
+            transcript_channel_id = select_channel_id("Transkript-Kanal", channels_map, settings.get("tickets_transcript_channel_id"), "tickets_transcript_channel")
+            transcript_dm_enabled = st.checkbox(
+                "Transcript-Link/Datei privat an Ticket-Ersteller senden",
+                value=settings.get("tickets_transcript_dm_enabled", False),
+            )
+
+            st.subheader("Option-Editor")
+            existing_options = settings.get("tickets_categories", []) if isinstance(settings.get("tickets_categories", []), list) else []
+            option_count_default = len(existing_options) if existing_options else 1
+            option_count = int(st.number_input("Anzahl Ticket-Optionen", min_value=1, max_value=5, value=max(1, min(5, option_count_default))))
+
+            built_options = []
+            for idx in range(option_count):
+                base = existing_options[idx] if idx < len(existing_options) and isinstance(existing_options[idx], dict) else {}
+                st.markdown(f"**Option {idx + 1}**")
+                opt_emoji = st.text_input("Emoji", value=str(base.get("emoji", "📩")), key=f"ticket_option_emoji_{idx}")
+                opt_name = st.text_input("Etikett", value=str(base.get("name", f"Ticket {idx + 1}")), key=f"ticket_option_name_{idx}")
+                opt_desc = st.text_input("Beschreibung", value=str(base.get("description", "Unser Team kann dir helfen!")), key=f"ticket_option_desc_{idx}")
+                opt_cat_id = select_category_id("Kategorie fuer diese Option", categories_map, base.get("category_channel_id"), f"ticket_option_category_{idx}")
+                opt_auto_role = select_role_id("Auto-Rolle (optional)", roles_map, base.get("auto_role_id"), f"ticket_option_auto_role_{idx}")
+                built_options.append(
+                    {
+                        "emoji": opt_emoji,
+                        "name": opt_name,
+                        "description": opt_desc,
+                        "category_channel_id": int(opt_cat_id) if (opt_cat_id and str(opt_cat_id).isdigit()) else opt_cat_id,
+                        "auto_role_id": int(opt_auto_role) if (opt_auto_role and str(opt_auto_role).isdigit()) else opt_auto_role,
+                    }
+                )
 
             if st.button("Ticket Einstellungen speichern"):
                 settings["tickets_enabled"] = tickets_enabled
-                settings["ticket_channel_id"] = ticket_channel_id
-                settings["tickets_panel_channel_id"] = ticket_channel_id
-                settings["tickets_categories"] = selected_categories
+                settings["ticket_channel_id"] = panel_channel_id
+                settings["tickets_panel_channel_id"] = panel_channel_id
+                settings["tickets_panel_mode"] = panel_mode
+                settings["tickets_panel_title"] = panel_title
+                settings["tickets_panel_description"] = panel_description
+                settings["tickets_categories"] = built_options
+                resolved_manager_roles = [str(roles_map[name]) for name in manager_role_names]
+                settings["tickets_manager_roles"] = manager_role_ids_manual or resolved_manager_roles
+                settings["tickets_open_category_id"] = int(open_category_id) if (open_category_id and str(open_category_id).isdigit()) else open_category_id
+                settings["tickets_claimed_category_id"] = int(claimed_category_id) if (claimed_category_id and str(claimed_category_id).isdigit()) else claimed_category_id
+                settings["tickets_closed_category_id"] = int(closed_category_id) if (closed_category_id and str(closed_category_id).isdigit()) else closed_category_id
+                settings["tickets_transcript_channel_id"] = int(transcript_channel_id) if (transcript_channel_id and str(transcript_channel_id).isdigit()) else transcript_channel_id
+                settings["tickets_transcript_dm_enabled"] = transcript_dm_enabled
+                settings["tickets_delete_on_close"] = delete_on_close
                 save_settings(settings)
                 st.success("Ticket Einstellungen gespeichert!")
 
-            if st.button("Ticket Panel veröffentlichen"):
+            if st.button("Ticket Panel veroeffentlichen"):
                 settings["tickets_enabled"] = tickets_enabled
-                settings["tickets_panel_channel_id"] = ticket_channel_id or settings.get("tickets_panel_channel_id")
-                settings["tickets_categories"] = selected_categories
+                settings["tickets_panel_channel_id"] = panel_channel_id or settings.get("tickets_panel_channel_id")
+                settings["tickets_panel_mode"] = panel_mode
+                settings["tickets_panel_title"] = panel_title
+                settings["tickets_panel_description"] = panel_description
+                settings["tickets_categories"] = built_options
                 settings["tickets_publish_trigger"] = True
                 save_settings(settings)
-                st.success("Ticket Panel wird veröffentlicht.")
+                st.success("Ticket Panel wird veroeffentlicht.")
 
         elif page == "Stempeluhr":
             render_page_header("Stempeluhr System", "Berechtigungen und Panel-Channel für die Zeit-Erfassung.")

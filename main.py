@@ -100,34 +100,13 @@ class MyBot(commands.Bot):
             # ── Ticket-Panel veroeffentlichen ──
             if settings.get('tickets_publish_trigger'):
                 try:
-                    channel_id = settings.get('tickets_panel_channel_id')
-                    if channel_id:
-                        channel = self.get_channel(int(channel_id))
-                        if channel:
-                            title = settings.get('tickets_panel_title', 'Support-Ticket')
-                            categories = settings.get('tickets_categories', [])
-                            category_labels = []
-                            for c in categories:
-                                if isinstance(c, dict):
-                                    category_labels.append(str(c.get('name') or c.get('category_channel_id') or 'Kategorie'))
-                                else:
-                                    category_labels.append(str(c))
-                            desc = '\n'.join([f'• {label}' for label in category_labels]) if category_labels else 'Klicke auf den Button um ein Ticket zu eroeffnen.'
-                            embed = discord.Embed(
-                                title=f'🎫 {title}',
-                                description=desc,
-                                color=0x38bdf8
-                            )
-                            embed.set_footer(text='GTA RP Support-System')
-                            # TicketView aus dem tickets cog holen
-                            ticket_cog = self.cogs.get('Tickets')
-                            if ticket_cog and hasattr(ticket_cog, 'TicketView'):
-                                view = ticket_cog.TicketView()
-                            else:
-                                from cogs.tickets import TicketView
-                                view = TicketView()
-                            await channel.send(embed=embed, view=view)
-                            logger.info(f'Ticket-Panel in #{channel.name} gepostet.')
+                    ticket_cog = self.cogs.get('Tickets')
+                    if ticket_cog and hasattr(ticket_cog, 'publish_panel'):
+                        for guild in self.guilds:
+                            await ticket_cog.publish_panel(guild)
+                        logger.info('Ticket-Panel ueber Tickets-Cog veroeffentlicht.')
+                    else:
+                        logger.warning('Tickets-Cog nicht verfuegbar, Ticket-Panel konnte nicht veroeffentlicht werden.')
                 except Exception as e:
                     logger.error(f'Fehler beim Ticket-Panel senden: {e}')
                 settings['tickets_publish_trigger'] = False

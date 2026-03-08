@@ -56,69 +56,47 @@ class StempelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="⏱ Einstempeln", style=discord.ButtonStyle.green, custom_id="stempel_ein_btn")
-    async def btn_ein(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="🕒 Ein-/Ausstempeln", style=discord.ButtonStyle.green, custom_id="stempel_toggle_btn")
+    async def btn_toggle(self, interaction: discord.Interaction, button: discord.ui.Button):
         settings = load_settings()
         if not has_stempel_role(interaction.user, settings, "stempeluhr_allowed_roles"):
             embed = error_embed("🚫 Keine Berechtigung", "Du hast keine Berechtigung zum Stempeln.")
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
-        
-        data = load_data()
-        uid = str(interaction.user.id)
-        
-        if uid in data and data[uid].get("eingestempelt"):
-            embed = error_embed("⚠️ Bereits eingestempelt", "Du bist bereits eingestempelt! Bitte erst ausstempeln.")
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        
-        now = datetime.now(timezone.utc)
-        if uid not in data:
-            data[uid] = {"name": str(interaction.user), "sessions": [], "eingestempelt": None}
-        
-        data[uid]["eingestempelt"] = now.isoformat()
-        data[uid]["name"] = str(interaction.user)
-        save_data(data)
-        
-        embed = success_embed(
-            "✅ Eingestempelt",
-            f"Du hast dich um **{format_time(now)} UTC** eingestempelt.\\n\\n👉 Vergiss nicht auszustempeln wenn du fertig bist!"
-        )
-        embed.set_footer(text="GTA-RP Zeiterfassung")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @discord.ui.button(label="⏱ Ausstempeln", style=discord.ButtonStyle.red, custom_id="stempel_aus_btn")
-    async def btn_aus(self, interaction: discord.Interaction, button: discord.ui.Button):
-        settings = load_settings()
-        if not has_stempel_role(interaction.user, settings, "stempeluhr_allowed_roles"):
-            embed = error_embed("🚫 Keine Berechtigung", "Du hast keine Berechtigung zum Stempeln.")
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        
         data = load_data()
         uid = str(interaction.user.id)
-        
-        if uid not in data or not data[uid].get("eingestempelt"):
-            embed = error_embed("⚠️ Nicht eingestempelt", "Du bist nicht eingestempelt! Bitte erst einstempeln.")
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        
+
         now = datetime.now(timezone.utc)
-        start = datetime.fromisoformat(data[uid]["eingestempelt"])
-        hours, minutes = calc_duration(start, now)
-        
-        session = {
-            "start": data[uid]["eingestempelt"],
-            "end": now.isoformat(),
-            "dauer": f"{hours}h {minutes}m"
-        }
-        data[uid].setdefault("sessions", []).append(session)
-        data[uid]["eingestempelt"] = None
+
+        if uid not in data:
+            data[uid] = {"name": str(interaction.user), "sessions": [], "eingestempelt": None, "last_reminder_sent": None}
+
+        current_start = data[uid].get("eingestempelt")
+        if current_start:
+            start = datetime.fromisoformat(current_start)
+            hours, minutes = calc_duration(start, now)
+            session = {
+                "start": current_start,
+                "end": now.isoformat(),
+                "dauer": f"{hours}h {minutes}m"
+            }
+            data[uid].setdefault("sessions", []).append(session)
+            data[uid]["eingestempelt"] = None
+            data[uid]["last_reminder_sent"] = None
+            action_text = f"Du hast dich erfolgreich abgemeldet. Du warst **{hours}h {minutes}m** im Dienst."
+            title = "✅ Ausgestempelt"
+        else:
+            data[uid]["eingestempelt"] = now.isoformat()
+            data[uid]["name"] = str(interaction.user)
+            action_text = "Du hast dich erfolgreich angemeldet."
+            title = "✅ Eingestempelt"
+
         save_data(data)
-        
+
         embed = success_embed(
-            "✅ Ausgestempelt",
-            f"Du hast dich um **{format_time(now)} UTC** ausgestempelt.\\n\\n⏱️ **Arbeitszeit:** {hours}h {minutes}m"
+            title,
+            f"{action_text}\\n\\n🗓️ **{format_time(now)} UTC**"
         )
         embed.set_footer(text="GTA-RP Zeiterfassung")
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -285,7 +263,7 @@ class Stempeluhr(commands.Cog):
                     f"Sitzungen: **{len(sessions)}**\\n"
                     f"Gesamt: **{total_h}h {total_m}m**"
                 ),
-                inline=True
+                inline=False
             )
         
         if len(data) > 10:
