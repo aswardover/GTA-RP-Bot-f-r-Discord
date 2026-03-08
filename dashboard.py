@@ -355,6 +355,13 @@ def render_page_header(title, subtitle):
     st.markdown(f"<h2 class='section-title'>{title}</h2>", unsafe_allow_html=True)
     st.markdown(f"<p class='section-sub'>{subtitle}</p>", unsafe_allow_html=True)
 
+def embed_config_block(settings, key_prefix, title_default, desc_default, color_default, footer_default):
+    title = st.text_input("Titel", value=settings.get(f"{key_prefix}_title", title_default), key=f"{key_prefix}_title_input")
+    description = st.text_area("Beschreibung", value=settings.get(f"{key_prefix}_description", desc_default), key=f"{key_prefix}_desc_input")
+    color = st.text_input("Farbe (Hex)", value=settings.get(f"{key_prefix}_color", color_default), key=f"{key_prefix}_color_input")
+    footer = st.text_input("Footer", value=settings.get(f"{key_prefix}_footer", footer_default), key=f"{key_prefix}_footer_input")
+    return title, description, color, footer
+
 def select_channel_id(label, channels_mapping, current_value, key_prefix):
     """Returns a channel ID string from dropdown options."""
     channel_names = list(channels_mapping.keys())
@@ -522,6 +529,7 @@ else:
             "Overview": "Übersicht",
             "Tickets": "Tickets",
             "Stempeluhr": "Stempeluhr",
+            "Server Tools": "Server Tools",
             "Auto Mod": "Automod",
             "If Rules": "Wenn-Funktionen",
             "Giveaway": "Giveaway",
@@ -530,6 +538,7 @@ else:
             "Polls": "Umfragen",
             "Moderation": "Moderation",
             "Logging": "Logging",
+            "Embed Hub": "Embed Hub",
             "Settings": "Einstellungen",
         }
 
@@ -698,10 +707,13 @@ else:
             automod_enabled = st.checkbox("Automod aktivieren", value=settings.get("automod_enabled", False))
             banned_words = st.text_area("Verbotene Wörter (kommasepariert)", value=", ".join(settings.get("automod_banned_words", [])))
             spam_threshold = st.number_input("Spam-Schwellenwert", value=settings.get("automod_spam_threshold", 5), min_value=1)
+            spam_timeframe = st.number_input("Spam-Zeitfenster (Sekunden)", value=settings.get("automod_spam_timeframe", 10), min_value=1)
             caps_threshold = st.slider("Caps-Schwellenwert", 0.0, 1.0, value=settings.get("automod_caps_threshold", 0.7))
             action = st.selectbox("Aktion bei Verstoß", ["delete", "warn", "mute", "ban"], index=["delete", "warn", "mute", "ban"].index(settings.get("automod_action", "delete")))
             
             caps_enabled = st.checkbox("Caps-Lock Filter aktivieren", value=settings.get("automod_caps_enabled", True))
+            block_links = st.checkbox("Links blockieren", value=settings.get("automod_block_links", False))
+            block_invites = st.checkbox("Discord-Einladungslinks blockieren", value=settings.get("automod_block_invites", False))
 
             log_channel_id = select_channel_id("Log-Channel", channels_map, settings.get("automod_log_channel"), "automod_log")
             
@@ -711,13 +723,25 @@ else:
                 settings["automod_enabled"] = automod_enabled
                 settings["automod_banned_words"] = [w.strip() for w in banned_words.split(",") if w.strip()]
                 settings["automod_spam_threshold"] = spam_threshold
+                settings["automod_spam_timeframe"] = spam_timeframe
                 settings["automod_caps_enabled"] = caps_enabled
                 settings["automod_caps_threshold"] = caps_threshold
+                settings["automod_block_links"] = block_links
+                settings["automod_block_invites"] = block_invites
                 settings["automod_action"] = action
                 settings["automod_log_channel"] = log_channel_id
                 settings["automod_mute_role"] = mute_role_id
                 save_settings(settings)
                 st.success("Automod-Einstellungen gespeichert!")
+
+        elif page == "Server Tools":
+            render_page_header("Server Tools", "MEE6-Style Moderationstools fuer den RP-Alltag: Slowmode, Lock/Unlock, Timeout.")
+            tools_enabled = st.checkbox("Server Tools aktivieren", value=settings.get("server_tools_enabled", True))
+            st.info("Neue Befehle: /slowmode, /lock, /unlock, /timeout, /untimeout")
+            if st.button("Server Tools speichern"):
+                settings["server_tools_enabled"] = tools_enabled
+                save_settings(settings)
+                st.success("Server Tools gespeichert.")
 
         elif page == "Wenn-Funktionen":
             render_page_header("Wenn-Funktionen", "Eventbasierte Regeln fuer Rollen-Events und Auto-Aktionen.")
@@ -953,3 +977,80 @@ else:
                 save_settings(settings)
                 st.success("Einstellungen gespeichert!")
                 st.rerun()  # Seite neu laden, um Navigation zu aktualisieren
+
+        elif page == "Embed Hub":
+            render_page_header("Embed Hub", "Zentrale MEE6-Style Konfiguration fuer alle wichtigen Embed-Vorlagen.")
+
+            with st.expander("Ankuendigungs-Embed", expanded=True):
+                title, desc, color, footer = embed_config_block(
+                    settings,
+                    "announce_embed",
+                    "📢 Ankündigung",
+                    "{text}",
+                    "#38bdf8",
+                    "Gesendet von {user}",
+                )
+                settings["announce_embed_title"] = title
+                settings["announce_embed_description"] = desc
+                settings["announce_embed_color"] = color
+                settings["announce_embed_footer"] = footer
+
+            with st.expander("Giveaway-Embed"):
+                title, desc, color, footer = embed_config_block(
+                    settings,
+                    "giveaway_embed",
+                    "🎉 Giveaway!",
+                    "Gegenstand: {item}\nEndet in: {time}",
+                    "#ff4500",
+                    "Klicke auf Teilnehmen!",
+                )
+                settings["giveaway_embed_title"] = title
+                settings["giveaway_embed_description"] = desc
+                settings["giveaway_embed_color"] = color
+                settings["giveaway_embed_footer"] = footer
+
+            with st.expander("Umfrage-Embed"):
+                title, desc, color, footer = embed_config_block(
+                    settings,
+                    "poll_embed",
+                    "📊 Umfrage",
+                    "{question}",
+                    "#8a2be2",
+                    "Stimme ab!",
+                )
+                settings["poll_embed_title"] = title
+                settings["poll_embed_description"] = desc
+                settings["poll_embed_color"] = color
+                settings["poll_embed_footer"] = footer
+
+            with st.expander("Moderation: Sanktion"):
+                title, desc, color, footer = embed_config_block(
+                    settings,
+                    "sanktion_embed",
+                    "🚫 Sanktion",
+                    "User: {user}\nBetrag: {betrag}\nGrund: {grund}\nDauer: {dauer} Tage",
+                    "#ff0000",
+                    "Sanktion erteilt",
+                )
+                settings["sanktion_embed_title"] = title
+                settings["sanktion_embed_description"] = desc
+                settings["sanktion_embed_color"] = color
+                settings["sanktion_embed_footer"] = footer
+
+            with st.expander("Moderation: Warnung"):
+                title, desc, color, footer = embed_config_block(
+                    settings,
+                    "warn_embed",
+                    "⚠️ Warnung",
+                    "User: {user}\nGrund: {grund}\nDauer: {dauer} Tage",
+                    "#ffa500",
+                    "Warnung erteilt",
+                )
+                settings["warn_embed_title"] = title
+                settings["warn_embed_description"] = desc
+                settings["warn_embed_color"] = color
+                settings["warn_embed_footer"] = footer
+
+            if st.button("Alle Embed-Vorlagen speichern"):
+                save_settings(settings)
+                st.success("Embed Hub gespeichert.")

@@ -78,3 +78,34 @@ echo "🤖 Bot-Status prüfen: sudo systemctl status discord-bot"
 echo "📊 Dashboard-Status prüfen: sudo systemctl status discord-dashboard"
 echo "🌐 Dashboard erreichbar unter: http://$(curl -s ifconfig.me):8501"
 echo "--------------------------------------------------"
+
+# 8. Optional: gta-update command (safe, does not overwrite env secrets)
+sudo bash -c "cat > /usr/local/bin/gta-update <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_DIR=$REPO_PATH
+BRANCH=main
+
+echo '==> Code aktualisieren'
+cd \"\$REPO_DIR\"
+git fetch origin
+git reset --hard \"origin/\$BRANCH\"
+
+echo '==> Python-Abhängigkeiten aktualisieren'
+if [ -x \"\$REPO_DIR/venv/bin/pip\" ] && [ -f \"\$REPO_DIR/requirements.txt\" ]; then
+    \"\$REPO_DIR/venv/bin/pip\" install -r \"\$REPO_DIR/requirements.txt\"
+fi
+
+echo '==> Dienste neu starten'
+sudo systemctl daemon-reload
+sudo systemctl restart gta-bot
+sudo systemctl restart gta-dashboard
+
+echo '==> Status prüfen'
+sudo systemctl --no-pager --full status gta-bot | sed -n '1,20p'
+sudo systemctl --no-pager --full status gta-dashboard | sed -n '1,20p'
+
+echo '==> Fertig'
+EOF"
+sudo chmod +x /usr/local/bin/gta-update
