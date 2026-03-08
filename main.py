@@ -217,4 +217,7 @@ class MyBot(commands.Bot):
 bot = MyBot()
 
 if __name__ == "__main__":
+    token = (TOKEN or "").strip()
+    if not token or token.startswith("YOUR_") or token.lower().startswith("dummy"):
+        raise RuntimeError("DISCORD_BOT_TOKEN fehlt oder ist ungueltig. Bitte als Umgebungsvariable setzen.")
     bot.run(TOKEN)

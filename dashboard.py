@@ -107,6 +107,16 @@ st.markdown("""
         color: var(--as-text);
         border-color: rgba(255,255,255,0.12);
     }
+    /* Keep Streamlit/BaseWeb dropdown popovers above custom layers and clickable. */
+    div[data-baseweb="popover"],
+    div[role="listbox"] {
+        z-index: 3000 !important;
+        pointer-events: auto !important;
+    }
+    .stSelectbox, .stMultiSelect {
+        position: relative;
+        z-index: 1;
+    }
     div[data-testid="stMetricValue"] {
         color: #93a6ff;
     }
@@ -312,6 +322,34 @@ def names_for_ids(mapping, id_list):
     """Mappt IDs auf bekannte Namen fuer Default-Werte in Multiselects."""
     reverse_map = {str(v): k for k, v in mapping.items()}
     return [reverse_map[str(item)] for item in (id_list or []) if str(item) in reverse_map]
+
+def select_role_id(label, roles_mapping, current_value, key_prefix):
+    """Returns a role ID string from dropdown plus manual fallback input."""
+    role_names = list(roles_mapping.keys())
+    current_str = str(current_value).strip() if current_value is not None else ""
+    selected_id = current_str or None
+
+    if role_names:
+        def_idx = index_for_value(roles_mapping, current_value)
+        selected_name = st.selectbox(
+            label,
+            options=[""] + role_names,
+            index=(def_idx + 1) if role_names else 0,
+            key=f"{key_prefix}_name",
+        )
+        if selected_name:
+            selected_id = str(roles_mapping.get(selected_name))
+    else:
+        st.info("Keine Rollen-Daten verfuegbar. Nutze die Rollen-ID als Fallback.")
+
+    manual_id = st.text_input(
+        f"{label} ID (Fallback)",
+        value=selected_id or "",
+        key=f"{key_prefix}_manual_id",
+    ).strip()
+    if manual_id:
+        return manual_id
+    return selected_id
 
 def render_page_header(title, subtitle):
     st.markdown(f"<h2 class='section-title'>{title}</h2>", unsafe_allow_html=True)
@@ -642,8 +680,7 @@ else:
 
             log_channel_id = select_channel_id("Log-Channel", channels_map, settings.get("automod_log_channel"), "automod_log")
             
-            role_names = list(roles_map.keys())
-            mute_role = st.selectbox("Mute-Rolle", options=[""] + role_names, index=0)
+            mute_role_id = select_role_id("Mute-Rolle", roles_map, settings.get("automod_mute_role"), "automod_mute_role")
             
             if st.button("Automod speichern"):
                 settings["automod_enabled"] = automod_enabled
@@ -653,7 +690,7 @@ else:
                 settings["automod_caps_threshold"] = caps_threshold
                 settings["automod_action"] = action
                 settings["automod_log_channel"] = log_channel_id
-                settings["automod_mute_role"] = roles_map.get(mute_role) if mute_role else None
+                settings["automod_mute_role"] = mute_role_id
                 save_settings(settings)
                 st.success("Automod-Einstellungen gespeichert!")
 
@@ -773,11 +810,10 @@ else:
             color = st.text_input("Embed Farbe (Hex)", "#8a2be2")
             
             st.subheader("Rollen zuweisen")
-            role_names = list(roles_map.keys())
             emoji1 = st.text_input("Emoji 1", "🔴")
-            role1 = st.selectbox("Rolle 1", options=[""] + role_names)
+            role1 = select_role_id("Rolle 1", roles_map, None, "reaction_role_1")
             emoji2 = st.text_input("Emoji 2", "🔵")
-            role2 = st.selectbox("Rolle 2", options=[""] + role_names)
+            role2 = select_role_id("Rolle 2", roles_map, None, "reaction_role_2")
             # Mehr können hinzugefügt werden
             
             async def _send_reaction_role(ch_id: int, embed: discord.Embed, emoji_role_map: dict):
@@ -800,9 +836,9 @@ else:
                 if rr_channel_id and title:
                     emoji_role_map = {}
                     if emoji1 and role1:
-                        emoji_role_map[emoji1] = str(roles_map[role1])
+                        emoji_role_map[emoji1] = str(role1)
                     if emoji2 and role2:
-                        emoji_role_map[emoji2] = str(roles_map[role2])
+                        emoji_role_map[emoji2] = str(role2)
 
                     bot = st.session_state.get("bot")
                     if bot is None:
@@ -838,7 +874,7 @@ else:
             
             st.subheader("Sanktionen")
             moderation_enabled = st.checkbox("Moderation aktivieren", value=settings.get("management_enabled", True))
-            sanktion_role = st.selectbox("Sanktions-Rolle", options=[""] + list(roles_map.keys()))
+            sanktion_role_id = select_role_id("Sanktions-Rolle", roles_map, settings.get("sanktion_role_id"), "moderation_sanktion_role")
             sanktion_embed_title = st.text_input("Sanktion Embed Titel", value=settings.get("sanktion_embed_title", "🚫 Sanktion"))
             sanktion_embed_description = st.text_area("Sanktion Embed Beschreibung", value=settings.get("sanktion_embed_description", "User: {user}\nBetrag: {betrag}\nGrund: {grund}\nDauer: {dauer} Tage"))
             sanktion_embed_color = st.text_input("Sanktion Embed Farbe (Hex)", value=settings.get("sanktion_embed_color", "#ff0000"))
@@ -855,7 +891,7 @@ else:
             
             if st.button("Moderation speichern"):
                 settings["management_enabled"] = moderation_enabled
-                settings["sanktion_role_id"] = roles_map.get(sanktion_role)
+                settings["sanktion_role_id"] = sanktion_role_id
                 settings["sanktion_embed_title"] = sanktion_embed_title
                 settings["sanktion_embed_description"] = sanktion_embed_description
                 settings["sanktion_embed_color"] = sanktion_embed_color

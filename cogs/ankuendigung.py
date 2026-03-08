@@ -20,17 +20,29 @@ class Ankuendigung(commands.Cog):
         # Hier könnte Logik für zeitgesteuerte Ankündigungen rein
         pass
 
+    @app_commands.guild_only()
     @app_commands.command(name="ankündigen", description="Sendet eine Ankündigung in einen Kanal")
     @app_commands.describe(kanal="Der Kanal für die Ankündigung", nachricht="Die Nachricht")
     async def ankuendigen(self, interaction: discord.Interaction, kanal: discord.TextChannel, nachricht: str):
         await self._run_announcement(interaction, kanal, nachricht)
 
+    @app_commands.guild_only()
     @app_commands.command(name="ankündigung", description="Sendet eine Ankündigung in einen Kanal")
     @app_commands.describe(kanal="Der Kanal für die Ankündigung", nachricht="Die Nachricht")
     async def ankuendigung(self, interaction: discord.Interaction, kanal: discord.TextChannel, nachricht: str):
         await self._run_announcement(interaction, kanal, nachricht)
 
+    @app_commands.guild_only()
+    @app_commands.command(name="ankuendigung", description="Sendet eine Ankuendigung in einen Kanal")
+    @app_commands.describe(kanal="Der Kanal fuer die Ankuendigung", nachricht="Die Nachricht")
+    async def ankuendigung_ascii(self, interaction: discord.Interaction, kanal: discord.TextChannel, nachricht: str):
+        await self._run_announcement(interaction, kanal, nachricht)
+
     async def _run_announcement(self, interaction: discord.Interaction, kanal: discord.TextChannel, nachricht: str):
+        if interaction.guild is None:
+            await interaction.response.send_message(embed=error_embed("Dieser Befehl funktioniert nur auf einem Server."), ephemeral=True)
+            return
+
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(embed=error_embed("Du hast keine Berechtigung dafür!"), ephemeral=True)
             return

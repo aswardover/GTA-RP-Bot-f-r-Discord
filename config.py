@@ -2,7 +2,8 @@
 import os
 
 # BOT CREDENTIALS
-TOKEN = "MTE1OTQyODU3OTA2NDI1NDQ5NA.Gg3e-A.yF6-X8p8Y_ZzZzZzZzZzZzZzZzZzZzZzZzZz" # Dummy Token
+# Prefer environment variable in production.
+TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 GUILD_ID = 678706941014573059
 
 # DISCORD OAUTH2 FOR DASHBOARD
@@ -18,3 +19,5 @@ LOGO_FILE = 'logo.jpg'
 COLOR_PRIMARY = 0x38bdf8
 COLOR_SUCCESS = 0x22c55e
 COLOR_ERROR = 0xef4444
+# Backward compatibility for modules using COLOR_INFO.
+COLOR_INFO = COLOR_PRIMARY
