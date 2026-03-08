@@ -21,18 +21,6 @@ class Ankuendigung(commands.Cog):
         pass
 
     @app_commands.guild_only()
-    @app_commands.command(name="ankündigen", description="Sendet eine Ankündigung in einen Kanal")
-    @app_commands.describe(kanal="Der Kanal für die Ankündigung", nachricht="Die Nachricht")
-    async def ankuendigen(self, interaction: discord.Interaction, kanal: discord.TextChannel, nachricht: str):
-        await self._run_announcement(interaction, kanal, nachricht)
-
-    @app_commands.guild_only()
-    @app_commands.command(name="ankündigung", description="Sendet eine Ankündigung in einen Kanal")
-    @app_commands.describe(kanal="Der Kanal für die Ankündigung", nachricht="Die Nachricht")
-    async def ankuendigung(self, interaction: discord.Interaction, kanal: discord.TextChannel, nachricht: str):
-        await self._run_announcement(interaction, kanal, nachricht)
-
-    @app_commands.guild_only()
     @app_commands.command(name="ankuendigung", description="Sendet eine Ankuendigung in einen Kanal")
     @app_commands.describe(kanal="Der Kanal fuer die Ankuendigung", nachricht="Die Nachricht")
     async def ankuendigung_ascii(self, interaction: discord.Interaction, kanal: discord.TextChannel, nachricht: str):
