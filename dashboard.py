@@ -1184,6 +1184,13 @@ if "user_id" not in st.session_state:
 if "access_token" not in st.session_state:
     st.session_state.access_token = None
 
+def _render_session_toast():
+    """Renders a success toast/message if set in session state."""
+    if "toast_message" in st.session_state:
+        msg = st.session_state.toast_message
+        st.success(msg)
+        del st.session_state.toast_message
+
 # --- LOGIN LOGIK ---
 def login_form():
     render_page_header("Discord Login", "Melde dich mit deinem Discord Account an, um das Dashboard zu verwalten.")
@@ -1569,6 +1576,7 @@ else:
                 ]
 
             if not st.session_state.tickets_editor_open:
+                _render_session_toast()  # Render overview toast
                 top_col, stat_toggle_col = st.columns([10, 2])
                 with top_col:
                     st.markdown("### Deine Ticket-Panels")
@@ -1611,6 +1619,7 @@ else:
                         
                         settings["ticket_panels"] = ticket_panels
                         save_settings(settings)
+                        st.session_state["toast_message"] = "Neues Panel erstellt."
                         st.rerun()
                     delete_from_overview = st.button("Markierte löschen", type="secondary")
 
@@ -1644,7 +1653,7 @@ else:
                     else:
                         st.session_state.tickets_selected_index = min(st.session_state.tickets_selected_index, len(ticket_panels) - 1)
                     save_settings(settings)
-                    st.success("Markierte Ticket-Panels wurden gelöscht.")
+                    st.session_state["toast_message"] = "Markierte Ticket-Panels wurden gelöscht."
                     st.rerun()
 
                 with list_col:
@@ -1683,6 +1692,8 @@ else:
                     st.session_state.tickets_editor_snapshot = deepcopy(panel)
                 if "tickets_confirm_leave" not in st.session_state:
                     st.session_state.tickets_confirm_leave = False
+
+                _render_session_toast()  # Render editor toast
 
                 back_col, title_col, action_col = st.columns([1, 7, 4])
                 with back_col:
@@ -1799,14 +1810,13 @@ else:
                     st.session_state.tickets_confirm_leave = False
 
                 if back_btn or discard_btn:
-                    override = discard_btn
-                    if has_unsaved_changes and not st.session_state.tickets_confirm_leave and not override:
+                    if has_unsaved_changes and not st.session_state.tickets_confirm_leave and not discard_btn:
                         st.error("Bitte bestätige zuerst das Verwerfen ungespeicherter Änderungen.")
                         st.stop()
                     st.session_state.pop("tickets_editor_snapshot", None)
                     st.session_state.tickets_confirm_leave = False
                     st.session_state.tickets_editor_open = False
-                    st.toast("Änderungen verworfen." if discard_btn else "Zurück zur Übersicht.")
+                    st.session_state["toast_message"] = "Änderungen verworfen." if discard_btn else "Zurück zur Übersicht."
                     st.rerun()
 
                 if delete_btn:
@@ -1833,7 +1843,7 @@ else:
                     st.session_state.tickets_confirm_leave = False
                     st.session_state.tickets_confirm_delete = False
                     st.session_state.tickets_editor_open = False
-                    st.toast("Ticket-Panel wurde gelöscht.")
+                    st.session_state["toast_message"] = "Ticket-Panel vollständig zurückgesetzt."
                     st.rerun()
 
                 if save_btn or publish_btn:
@@ -1867,7 +1877,7 @@ else:
                     save_settings(settings)
                     st.session_state.tickets_editor_snapshot = deepcopy(panel)
                     st.session_state.tickets_confirm_leave = False
-                    st.toast("Ticket-Panel gespeichert." if save_btn else "Ticket-Panel gespeichert und wird veröffentlicht.")
+                    st.session_state["toast_message"] = "Ticket-Panel gespeichert." if save_btn else "Ticket-Panel gespeichert und wird veröffentlicht."
                     st.rerun()
 
         elif page == "Stempeluhr":
@@ -1891,6 +1901,7 @@ else:
                 ]
 
             if not st.session_state.stempeluhr_editor_open:
+                _render_session_toast() # Stempeluhr Overview Toast
                 top_col, stat_toggle_col = st.columns([10, 2])
                 with top_col:
                     st.markdown("### Deine Stempeluhr-Panels")
@@ -1922,6 +1933,7 @@ else:
                         st.session_state.stempeluhr_editor_snapshot = deepcopy(stempel_panels[st.session_state.stempeluhr_selected_index])
                         st.session_state.stempeluhr_confirm_leave = False
                         st.session_state.stempeluhr_editor_open = True
+                        st.session_state["toast_message"] = "Neues Stempeluhr-Panel erstellt."
                         st.rerun()
                     delete_stempel_from_overview = st.button("Markierte löschen", key="stempeluhr_delete_marked", type="secondary")
 
@@ -1944,7 +1956,7 @@ else:
                     else:
                         st.session_state.stempeluhr_selected_index = min(st.session_state.stempeluhr_selected_index, len(stempel_panels) - 1)
                     save_settings(settings)
-                    st.success("Markierte Stempeluhr-Panels wurden gelöscht.")
+                    st.session_state["toast_message"] = "Markierte Stempeluhr-Panels wurden gelöscht."
                     st.rerun()
 
                 with list_col:
@@ -1985,6 +1997,8 @@ else:
                 if "stempeluhr_confirm_leave" not in st.session_state:
                     st.session_state.stempeluhr_confirm_leave = False
 
+                _render_session_toast() # Stempeluhr Editor Toast
+
                 back_col, title_col, action_col = st.columns([1, 7, 4])
                 with back_col:
                     back_btn = st.button("<", key="stempeluhr_back")
@@ -1994,6 +2008,8 @@ else:
                     discard_btn = st.button("Verwerfen", key="stempeluhr_discard")
                     save_btn = st.button("Speichern", key="stempeluhr_save")
                     publish_btn = st.button("Veröffentlichen", key="stempeluhr_publish")
+
+                delete_btn = st.button("Panel jetzt löschen", key="stempeluhr_editor_delete", type="secondary")
 
                 with st.expander("Allgemein", expanded=True):
                     stempeluhr_enabled = st.checkbox("Stempeluhr aktivieren", value=panel.get("enabled", False), key="stempeluhr_editor_enabled")
@@ -2067,7 +2083,24 @@ else:
                     st.session_state.pop("stempeluhr_editor_snapshot", None)
                     st.session_state.stempeluhr_confirm_leave = False
                     st.session_state.stempeluhr_editor_open = False
-                    st.toast("Änderungen verworfen." if discard_btn else "Zurück zur Übersicht.")
+                    st.session_state["toast_message"] = "Änderungen verworfen." if discard_btn else "Zurück zur Übersicht."
+                    st.rerun()
+
+                if delete_btn:
+                    settings["stempeluhr_panels"] = []
+                    settings["stempeluhr_enabled"] = False
+                    settings["stempel_ein_roles"] = []
+                    settings["stempel_aus_roles"] = []
+                    settings["stempeluhr_allowed_roles"] = []
+                    settings["stempeluhr_admin_roles"] = []
+                    settings["stempeluhr_panel_channel_id"] = ""
+                    settings["stempeluhr_panel_name"] = "Stempeluhr Panel"
+                    st.session_state.stempeluhr_selected_index = 0
+                    save_settings(settings)
+                    st.session_state.pop("stempeluhr_editor_snapshot", None)
+                    st.session_state.stempeluhr_confirm_leave = False
+                    st.session_state.stempeluhr_editor_open = False
+                    st.session_state["toast_message"] = "Stempeluhr-Panel zurückgesetzt."
                     st.rerun()
 
                 if save_btn or publish_btn:
@@ -2089,7 +2122,7 @@ else:
                     save_settings(settings)
                     st.session_state.stempeluhr_editor_snapshot = deepcopy(panel)
                     st.session_state.stempeluhr_confirm_leave = False
-                    st.toast("Stempeluhr gespeichert." if save_btn else "Stempeluhr gespeichert und Panel wird veröffentlicht.")
+                    st.session_state["toast_message"] = "Stempeluhr gespeichert." if save_btn else "Stempeluhr gespeichert und Panel wird veröffentlicht."
                     st.rerun()
 
         elif page == "Automod":
