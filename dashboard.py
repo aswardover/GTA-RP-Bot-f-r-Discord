@@ -1508,7 +1508,6 @@ else:
         
         if page == "Übersicht":
             render_page_header("Bot Übersicht", "Schneller Überblick über Status und Kernmetriken.")
-            _enable_overview_autorefresh(8000)
             refreshed_data = load_discord_data()
             runtime = _bot_runtime_status()
             guild_stats = _guild_stats_for_selected(discord_data, selected_server_entry)
