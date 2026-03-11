@@ -440,6 +440,7 @@ def _normalize_if_rule(raw):
         "action": "send_message",
         "channel": str(item.get("channel", "")).strip(),
         "message": str(item.get("message", "")).strip(),
+        "send_as_embed": bool(item.get("send_as_embed", False)),
         "allowed_roles": [str(x) for x in (item.get("allowed_roles", []) if isinstance(item.get("allowed_roles"), list) else []) if str(x).strip()],
     }
 
@@ -461,6 +462,7 @@ def _normalize_reaction_panel(raw, idx=0):
         "title": str(item.get("title", "Wähle deine Rollen")).strip() or "Wähle deine Rollen",
         "description": str(item.get("description", "Reagiere mit Emojis um Rollen zu bekommen.")).strip() or "Reagiere mit Emojis um Rollen zu bekommen.",
         "color": str(item.get("color", "#8a2be2")).strip() or "#8a2be2",
+        "send_as_embed": bool(item.get("send_as_embed", True)),
         "items": cleaned_items,
         "allowed_roles": [str(x) for x in (item.get("allowed_roles", []) if isinstance(item.get("allowed_roles"), list) else []) if str(x).strip()],
     }
@@ -825,6 +827,43 @@ def select_role_id(label, roles_mapping, current_value, key_prefix, allow_manual
 def render_page_header(title, subtitle):
     st.markdown(f"<h2 class='section-title'>{title}</h2>", unsafe_allow_html=True)
     st.markdown(f"<p class='section-sub'>{subtitle}</p>", unsafe_allow_html=True)
+
+PLACEHOLDER_REGISTRY = {
+    "announce": ["{text}", "{user}"],
+    "giveaway": ["{item}", "{time}"],
+    "poll": ["{question}"],
+    "sanktion": ["{user}", "{betrag}", "{grund}", "{dauer}"],
+    "warn": ["{user}", "{grund}", "{dauer}"],
+    "reaction_roles": [],
+}
+
+def _render_placeholder_registry(context_key):
+    placeholders = PLACEHOLDER_REGISTRY.get(context_key, [])
+    if not placeholders:
+        st.caption("Verfügbare Platzhalter: Keine")
+        return
+    st.caption("Verfügbare Platzhalter: " + ", ".join(placeholders))
+
+def _render_embed_preview(title, description, footer):
+    st.caption("Live-Vorschau")
+    safe_title = title or "(kein Titel)"
+    safe_description = description or "(keine Beschreibung)"
+    safe_footer = footer or "(kein Footer)"
+    st.markdown(
+        f"<div class='ticket-panel-card'><div class='ticket-panel-head'><span>{safe_title}</span><span class='pill-ok'>Embed</span></div>"
+        f"<div class='ticket-panel-meta'>{safe_description}</div><div class='ticket-panel-meta'>Footer: {safe_footer}</div></div>",
+        unsafe_allow_html=True,
+    )
+
+def render_embed_designer(settings, key_prefix, title_default, desc_default, color_default, footer_default, context_key):
+    st.subheader("Embed-Baukasten")
+    title = st.text_input("Embed Titel", value=settings.get(f"{key_prefix}_title", title_default), key=f"{key_prefix}_title_input")
+    description = st.text_area("Embed Beschreibung", value=settings.get(f"{key_prefix}_description", desc_default), key=f"{key_prefix}_desc_input")
+    color = st.text_input("Embed Farbe (Hex)", value=settings.get(f"{key_prefix}_color", color_default), key=f"{key_prefix}_color_input")
+    footer = st.text_input("Embed Footer", value=settings.get(f"{key_prefix}_footer", footer_default), key=f"{key_prefix}_footer_input")
+    _render_placeholder_registry(context_key)
+    _render_embed_preview(title, _preview_text(description, "#preview"), _preview_text(footer, "#preview"))
+    return title, description, color, footer
 
 def embed_config_block(settings, key_prefix, title_default, desc_default, color_default, footer_default):
     title = st.text_input("Titel", value=settings.get(f"{key_prefix}_title", title_default), key=f"{key_prefix}_title_input")
@@ -1849,12 +1888,14 @@ else:
             unlock_enabled = st.checkbox("/unlock aktivieren", value=settings.get("server_tools_unlock_enabled", legacy_default))
             timeout_enabled = st.checkbox("/timeout aktivieren", value=settings.get("server_tools_timeout_enabled", legacy_default))
             untimeout_enabled = st.checkbox("/untimeout aktivieren", value=settings.get("server_tools_untimeout_enabled", legacy_default))
+            server_tools_send_as_embed = st.checkbox("Antworten als Embed senden", value=settings.get("server_tools_send_as_embed", True))
             if st.button("Server Tools speichern"):
                 settings["server_tools_slowmode_enabled"] = slowmode_enabled
                 settings["server_tools_lock_enabled"] = lock_enabled
                 settings["server_tools_unlock_enabled"] = unlock_enabled
                 settings["server_tools_timeout_enabled"] = timeout_enabled
                 settings["server_tools_untimeout_enabled"] = untimeout_enabled
+                settings["server_tools_send_as_embed"] = server_tools_send_as_embed
                 settings["server_tools_enabled"] = any([
                     slowmode_enabled,
                     lock_enabled,
@@ -1898,6 +1939,7 @@ else:
                                 "action": "send_message",
                                 "channel": "",
                                 "message": "Hallo {user}",
+                                "send_as_embed": False,
                                 "allowed_roles": [],
                             }
                         )
@@ -2005,6 +2047,7 @@ else:
                     key="ifrules_message",
                     placeholder="Verwende {user} und {server}",
                 )
+                send_as_embed = st.checkbox("Als Embed senden", value=bool(rule.get("send_as_embed", False)), key="ifrules_send_as_embed")
                 allowed_role_names = st.multiselect(
                     "Nur ausführen, wenn Mitglied eine dieser Rollen hat (optional)",
                     options=list(roles_map.keys()),
@@ -2034,6 +2077,7 @@ else:
                             "action": "send_message",
                             "channel": str(selected_channel_id),
                             "message": message,
+                            "send_as_embed": bool(send_as_embed),
                             "allowed_roles": allowed_role_ids,
                         }
                         settings["custom_rules"] = custom_rules
@@ -2048,11 +2092,16 @@ else:
         elif page == "Giveaway":
             render_page_header("Gewinnspiel", "Passe das Gewinnspiel-Embed im gewohnten Stil an.")
             giveaway_enabled = st.checkbox("Gewinnspiel aktivieren", value=settings.get("giveaway_enabled", False))
-            
-            giveaway_embed_title = st.text_input("Embed Titel", value=settings.get("giveaway_embed_title", "🎉 Giveaway!"))
-            giveaway_embed_description = st.text_area("Embed Beschreibung", value=settings.get("giveaway_embed_description", "Gegenstand: {item}\nEndet in: {time}"))
-            giveaway_embed_color = st.text_input("Embed Farbe (Hex)", value=settings.get("giveaway_embed_color", "#ff4500"))
-            giveaway_embed_footer = st.text_input("Embed Footer", value=settings.get("giveaway_embed_footer", "Klicke auf Teilnehmen!"))
+            giveaway_send_as_embed = st.checkbox("Nachrichten als Embed senden", value=settings.get("giveaway_send_as_embed", True))
+            giveaway_embed_title, giveaway_embed_description, giveaway_embed_color, giveaway_embed_footer = render_embed_designer(
+                settings,
+                "giveaway_embed",
+                "🎉 Giveaway!",
+                "Gegenstand: {item}\nEndet in: {time}",
+                "#ff4500",
+                "Klicke auf Teilnehmen!",
+                "giveaway",
+            )
             
             if st.button("Gewinnspiel-Embed speichern"):
                 settings["giveaway_enabled"] = giveaway_enabled
@@ -2060,6 +2109,7 @@ else:
                 settings["giveaway_embed_description"] = giveaway_embed_description
                 settings["giveaway_embed_color"] = giveaway_embed_color
                 settings["giveaway_embed_footer"] = giveaway_embed_footer
+                settings["giveaway_send_as_embed"] = giveaway_send_as_embed
                 save_settings(settings)
                 st.success("Gewinnspiel-Embed gespeichert!")
 
@@ -2071,10 +2121,15 @@ else:
             
             announce_embed_enabled = st.checkbox("Als Embed senden", value=settings.get("announce_embed_enabled", False))
             if announce_embed_enabled:
-                announce_embed_title = st.text_input("Embed Titel", value=settings.get("announce_embed_title", "📢 Ankündigung"))
-                announce_embed_description = st.text_area("Embed Beschreibung", value=settings.get("announce_embed_description", "{text}"))
-                announce_embed_color = st.text_input("Embed Farbe (Hex)", value=settings.get("announce_embed_color", "#38bdf8"))
-                announce_embed_footer = st.text_input("Embed Footer", value=settings.get("announce_embed_footer", "Gesendet von {user}"))
+                announce_embed_title, announce_embed_description, announce_embed_color, announce_embed_footer = render_embed_designer(
+                    settings,
+                    "announce_embed",
+                    "📢 Ankündigung",
+                    "{text}",
+                    "#38bdf8",
+                    "Gesendet von {user}",
+                    "announce",
+                )
                 
                 if st.button("Ankündigung Embed speichern"):
                     settings["announce_enabled"] = announce_enabled
@@ -2120,7 +2175,7 @@ else:
             if "reaction_roles_selected_index" not in st.session_state:
                 st.session_state.reaction_roles_selected_index = 0
             
-            async def _send_reaction_role(ch_id: int, embed: discord.Embed, emoji_role_map: dict, allowed_roles: list[str]):
+            async def _send_reaction_role(ch_id: int, embed: discord.Embed, emoji_role_map: dict, allowed_roles: list[str], send_as_embed: bool, fallback_text: str):
                 # Runs in the bot event loop.
                 bot = st.session_state.get("bot")
                 if bot is None:
@@ -2129,7 +2184,11 @@ else:
                 if chan is None:
                     _append_audit_entry("Reaktionsrollen", "Publish fehlgeschlagen", f"Kanal {ch_id} nicht gefunden", status="failed")
                     return
-                msg = await chan.send(embed=embed)
+                if send_as_embed:
+                    msg = await chan.send(embed=embed)
+                else:
+                    plain_text = _preview_text(fallback_text or "Reagiere und erhalte deine Rollen.", "#rollen")
+                    msg = await chan.send(content=plain_text)
                 for emoji in emoji_role_map.keys():
                     await msg.add_reaction(emoji)
                 rr_data[str(msg.id)] = emoji_role_map
@@ -2157,6 +2216,7 @@ else:
                                 "title": "Wähle deine Rollen",
                                 "description": "Reagiere mit Emojis um Rollen zu bekommen.",
                                 "color": "#8a2be2",
+                                "send_as_embed": True,
                                 "items": [],
                             }
                         )
@@ -2250,6 +2310,7 @@ else:
                 title = st.text_input("Embed Titel", value=panel.get("title", "Wähle deine Rollen"), key="rr_title")
                 description = st.text_area("Embed Beschreibung", value=panel.get("description", "Reagiere mit Emojis um Rollen zu bekommen."), key="rr_description")
                 color = st.text_input("Embed Farbe (Hex)", value=panel.get("color", "#8a2be2"), key="rr_color")
+                rr_send_as_embed = st.checkbox("Panel als Embed senden", value=bool(panel.get("send_as_embed", True)), key="rr_send_as_embed")
 
                 st.subheader("Rollen zuweisen")
                 emoji1 = st.text_input("Emoji 1", value=str(item1.get("emoji", "🔴")), key="rr_emoji1")
@@ -2285,6 +2346,7 @@ else:
                             "title": title,
                             "description": description,
                             "color": color,
+                            "send_as_embed": bool(rr_send_as_embed),
                             "items": items_built,
                             "allowed_roles": panel_allowed_roles,
                         }
@@ -2314,7 +2376,7 @@ else:
                                     embed = discord.Embed(title=title, description=description, color=parsed_color)
                                     effective_allowed = list(dict.fromkeys(rr_scope_roles + panel_allowed_roles))
                                     _append_audit_entry("Reaktionsrollen", "Publish gestartet", f"Panel {panel_name}", status="queued")
-                                    bot.loop.create_task(_send_reaction_role(int(rr_channel_id), embed, emoji_role_map, effective_allowed))
+                                    bot.loop.create_task(_send_reaction_role(int(rr_channel_id), embed, emoji_role_map, effective_allowed, bool(rr_send_as_embed), description))
                                     panel["enabled"] = True
                                     rr_panels[selected_idx] = panel
                                     settings["reaction_role_panels"] = rr_panels
@@ -2329,16 +2391,24 @@ else:
         elif page == "Umfragen":
             render_page_header("Umfragen", "Definiere Titel, Farbe und Footer für Poll-Embeds.")
             polls_enabled = st.checkbox("Umfragen aktivieren", value=settings.get("polls_enabled", False))
-            
-            poll_embed_title = st.text_input("Embed Titel", value=settings.get("poll_embed_title", "📊 Umfrage"))
-            poll_embed_color = st.text_input("Embed Farbe (Hex)", value=settings.get("poll_embed_color", "#8a2be2"))
-            poll_embed_footer = st.text_input("Embed Footer", value=settings.get("poll_embed_footer", "Stimme ab!"))
+            poll_send_as_embed = st.checkbox("Nachrichten als Embed senden", value=settings.get("poll_send_as_embed", True))
+            poll_embed_title, poll_embed_description, poll_embed_color, poll_embed_footer = render_embed_designer(
+                settings,
+                "poll_embed",
+                "📊 Umfrage",
+                "{question}",
+                "#8a2be2",
+                "Stimme ab!",
+                "poll",
+            )
             
             if st.button("Umfrage Embed speichern"):
                 settings["polls_enabled"] = polls_enabled
                 settings["poll_embed_title"] = poll_embed_title
+                settings["poll_embed_description"] = poll_embed_description
                 settings["poll_embed_color"] = poll_embed_color
                 settings["poll_embed_footer"] = poll_embed_footer
+                settings["poll_send_as_embed"] = poll_send_as_embed
                 save_settings(settings)
                 st.success("Umfrage Embed gespeichert!")
 
@@ -2348,16 +2418,28 @@ else:
             st.subheader("Sanktionen")
             moderation_enabled = st.checkbox("Moderation aktivieren", value=settings.get("management_enabled", True))
             sanktion_role_id = select_role_id("Sanktions-Rolle", roles_map, settings.get("sanktion_role_id"), "moderation_sanktion_role")
-            sanktion_embed_title = st.text_input("Sanktion Embed Titel", value=settings.get("sanktion_embed_title", "🚫 Sanktion"))
-            sanktion_embed_description = st.text_area("Sanktion Embed Beschreibung", value=settings.get("sanktion_embed_description", "User: {user}\nBetrag: {betrag}\nGrund: {grund}\nDauer: {dauer} Tage"))
-            sanktion_embed_color = st.text_input("Sanktion Embed Farbe (Hex)", value=settings.get("sanktion_embed_color", "#ff0000"))
-            sanktion_embed_footer = st.text_input("Sanktion Embed Footer", value=settings.get("sanktion_embed_footer", "Sanktion erteilt"))
+            sanktion_embed_title, sanktion_embed_description, sanktion_embed_color, sanktion_embed_footer = render_embed_designer(
+                settings,
+                "sanktion_embed",
+                "🚫 Sanktion",
+                "User: {user}\nBetrag: {betrag}\nGrund: {grund}\nDauer: {dauer} Tage",
+                "#ff0000",
+                "Sanktion erteilt",
+                "sanktion",
+            )
+            sanktion_send_as_embed = st.checkbox("Sanktions-Nachricht als Embed senden", value=settings.get("sanktion_send_as_embed", True))
             
             st.subheader("Warnungen")
-            warn_embed_title = st.text_input("Warn Embed Titel", value=settings.get("warn_embed_title", "⚠️ Warnung"))
-            warn_embed_description = st.text_area("Warn Embed Beschreibung", value=settings.get("warn_embed_description", "User: {user}\nGrund: {grund}\nDauer: {dauer} Tage"))
-            warn_embed_color = st.text_input("Warn Embed Farbe (Hex)", value=settings.get("warn_embed_color", "#ffa500"))
-            warn_embed_footer = st.text_input("Warn Embed Footer", value=settings.get("warn_embed_footer", "Warnung erteilt"))
+            warn_embed_title, warn_embed_description, warn_embed_color, warn_embed_footer = render_embed_designer(
+                settings,
+                "warn_embed",
+                "⚠️ Warnung",
+                "User: {user}\nGrund: {grund}\nDauer: {dauer} Tage",
+                "#ffa500",
+                "Warnung erteilt",
+                "warn",
+            )
+            warn_send_as_embed = st.checkbox("Warn-Nachricht als Embed senden", value=settings.get("warn_send_as_embed", True))
             
             st.subheader("Logs")
             moderation_log_channel_id = select_channel_id("Moderations-Log-Kanal", channels_map, settings.get("moderation_log_channel"), "moderation_log")
@@ -2369,10 +2451,12 @@ else:
                 settings["sanktion_embed_description"] = sanktion_embed_description
                 settings["sanktion_embed_color"] = sanktion_embed_color
                 settings["sanktion_embed_footer"] = sanktion_embed_footer
+                settings["sanktion_send_as_embed"] = sanktion_send_as_embed
                 settings["warn_embed_title"] = warn_embed_title
                 settings["warn_embed_description"] = warn_embed_description
                 settings["warn_embed_color"] = warn_embed_color
                 settings["warn_embed_footer"] = warn_embed_footer
+                settings["warn_send_as_embed"] = warn_send_as_embed
                 settings["moderation_log_channel"] = moderation_log_channel_id
                 save_settings(settings)
                 st.success("Warns/Sanktionen gespeichert!")

@@ -44,6 +44,7 @@ class Polls(commands.Cog):
             return
 
         settings = self.bot.get_settings()
+        send_as_embed = bool(settings.get("poll_send_as_embed", True))
         embed = discord.Embed(
             title=settings.get("poll_embed_title", "📊 Umfrage"),
             description=f"**{question}**\n\n" + "\n".join([f"{i+1}. {opt}" for i, opt in enumerate(option_list)]),
@@ -55,7 +56,11 @@ class Polls(commands.Cog):
         for i, opt in enumerate(option_list):
             view.add_item(PollButton(opt, interaction.id, i))
 
-        await interaction.response.send_message(embed=embed, view=view)
+        if send_as_embed:
+            await interaction.response.send_message(embed=embed, view=view)
+        else:
+            plain_text = f"{settings.get('poll_embed_title', '📊 Umfrage')}\n\n{question}\n" + "\n".join([f"{i+1}. {opt}" for i, opt in enumerate(option_list)])
+            await interaction.response.send_message(content=plain_text, view=view)
         message = await interaction.original_response()
 
         await add_poll(str(interaction.id), question, json.dumps(option_list), anonymous, json.dumps({}), json.dumps([0] * len(option_list)), str(interaction.channel.id), str(message.id))

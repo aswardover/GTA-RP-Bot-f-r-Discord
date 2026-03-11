@@ -73,7 +73,13 @@ class Moderation(commands.Cog):
         )
         embed.set_footer(text=settings.get("sanktion_embed_footer", "Sanktion erteilt"))
 
-        await interaction.response.send_message(embed=embed)
+        if settings.get("sanktion_send_as_embed", True):
+            await interaction.response.send_message(embed=embed)
+        else:
+            plain_text = settings.get("sanktion_embed_description", "User: {user}\nBetrag: {betrag}\nGrund: {grund}\nDauer: {dauer} Tage").format(
+                user=user.mention, betrag=betrag, grund=grund, dauer=dauer
+            )
+            await interaction.response.send_message(content=plain_text)
 
         await add_sanktion(str(user.id), betrag, grund, dauer, end_time.isoformat(), str(interaction.guild.id), role_id, settings.get("moderation_log_channel"))
 
@@ -96,7 +102,13 @@ class Moderation(commands.Cog):
         )
         embed.set_footer(text=settings.get("warn_embed_footer", "Warnung erteilt"))
 
-        await interaction.response.send_message(embed=embed)
+        if settings.get("warn_send_as_embed", True):
+            await interaction.response.send_message(embed=embed)
+        else:
+            plain_text = settings.get("warn_embed_description", "User: {user}\nGrund: {grund}\nDauer: {dauer} Tage").format(
+                user=user.mention, grund=grund, dauer=dauer
+            )
+            await interaction.response.send_message(content=plain_text)
 
         await add_warn(str(user.id), grund, dauer, end_time.isoformat(), str(interaction.guild.id), settings.get("moderation_log_channel"))
 

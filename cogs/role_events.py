@@ -3,6 +3,8 @@ import discord
 from discord.ext import commands
 import datetime
 import json
+import config
+from embeds import create_embed
 
 class RoleEvents(commands.Cog):
     def __init__(self, bot):
@@ -64,10 +66,15 @@ class RoleEvents(commands.Cog):
         if action == "send_message":
             channel_id = rule.get("channel")
             message = rule.get("message", "").format(user=member.mention, server=member.guild.name)
+            send_as_embed = bool(rule.get("send_as_embed", False))
             if channel_id:
                 channel = self.bot.get_channel(int(channel_id))
                 if channel:
-                    await channel.send(message)
+                    if send_as_embed:
+                        embed = create_embed(description=message, color=config.COLOR_INFO)
+                        await channel.send(embed=embed)
+                    else:
+                        await channel.send(message)
         # Weitere Aktionen können hier hinzugefügt werden, z.B. add_role, remove_role, etc.
 
 async def setup(bot):

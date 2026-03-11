@@ -50,15 +50,21 @@ class Giveaway(commands.Cog):
         end_time = datetime.now() + timedelta(minutes=time)
         giveaway_id = random.randint(1000, 9999)
 
+        desc_text = settings.get("giveaway_embed_description", "Gegenstand: {item}\nEndet in: {time}").format(item=item, time=f"{time} Minuten")
+        send_as_embed = bool(settings.get("giveaway_send_as_embed", True))
         embed = discord.Embed(
             title=settings.get("giveaway_embed_title", "🎉 Giveaway!"),
-            description=settings.get("giveaway_embed_description", "Gegenstand: {item}\nEndet in: {time}").format(item=item, time=f"{time} Minuten"),
+            description=desc_text,
             color=int(settings.get("giveaway_embed_color", "#ff4500").lstrip("#"), 16)
         )
         embed.set_footer(text=settings.get("giveaway_embed_footer", "Klicke auf Teilnehmen!"))
 
         view = GiveawayView(giveaway_id)
-        await interaction.response.send_message(embed=embed, view=view)
+        if send_as_embed:
+            await interaction.response.send_message(embed=embed, view=view)
+        else:
+            plain_text = f"{settings.get('giveaway_embed_title', '🎉 Giveaway!')}\n{desc_text}\n\n{settings.get('giveaway_embed_footer', 'Klicke auf Teilnehmen!')}"
+            await interaction.response.send_message(content=plain_text, view=view)
         message = await interaction.original_response()
 
         await add_giveaway(str(giveaway_id), item, end_time.isoformat(), str(interaction.channel.id), str(message.id), json.dumps([]))
@@ -95,17 +101,19 @@ class Giveaway(commands.Cog):
         if channel:
             try:
                 message = await channel.fetch_message(int(giveaway[4]))
-                embed = message.embeds[0]
                 if winner:
                     winner_user = self.bot.get_user(winner)
-                    if winner_user:
-                        winner_text = winner_user.mention
-                    else:
-                        winner_text = f"<@{winner}>"
-                    embed.description += f"\n\n🏆 Gewinner: {winner_text}"
+                    winner_text = winner_user.mention if winner_user else f"<@{winner}>"
                 else:
-                    embed.description += "\n\n❌ Keine Teilnehmer."
-                await message.edit(embed=embed, view=None)
+                    winner_text = "❌ Keine Teilnehmer."
+
+                if message.embeds:
+                    embed = message.embeds[0]
+                    embed.description = f"{embed.description or ''}\n\n🏆 Gewinner: {winner_text}"
+                    await message.edit(embed=embed, view=None)
+                else:
+                    final_text = f"{message.content or 'Giveaway beendet'}\n\n🏆 Gewinner: {winner_text}"
+                    await message.edit(content=final_text, view=None)
             except Exception:
                 pass
 
