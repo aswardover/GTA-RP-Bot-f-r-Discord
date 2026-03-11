@@ -5,6 +5,7 @@ import discord
 from discord.ext import commands
 import json
 import os
+import datetime
 
 DATA_FILE = "discord_data.json"
 
@@ -49,7 +50,7 @@ class DataExporter(commands.Cog):
         await self.export_data()
 
     async def export_data(self):
-        data = {"channels": [], "roles": [], "categories": [], "guilds": []}
+        data = {"channels": [], "roles": [], "categories": [], "guilds": [], "meta": {}}
         for guild in self.bot.guilds:
             online_count = 0
             try:
@@ -57,12 +58,33 @@ class DataExporter(commands.Cog):
             except Exception:
                 online_count = 0
 
+            members = []
+            try:
+                for member in guild.members:
+                    if member.bot:
+                        continue
+                    member_status = str(getattr(member, "status", discord.Status.offline))
+                    members.append(
+                        {
+                            "id": str(member.id),
+                            "name": str(member.name),
+                            "display_name": str(member.display_name),
+                            "status": member_status,
+                            "online": member_status != "offline",
+                        }
+                    )
+            except Exception:
+                members = []
+
+            members.sort(key=lambda item: str(item.get("display_name") or item.get("name") or "").lower())
+
             data["guilds"].append(
                 {
                     "id": str(guild.id),
                     "name": guild.name,
                     "member_count": int(guild.member_count or 0),
                     "online_count": int(online_count),
+                    "members": members,
                 }
             )
 
@@ -90,6 +112,12 @@ class DataExporter(commands.Cog):
                     "id": str(cat.id),
                     "name": cat.name
                 })
+
+        data["meta"] = {
+            "exported_at": datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "bot_user": str(getattr(self.bot.user, "name", "")) if self.bot.user else "",
+            "bot_id": str(getattr(self.bot.user, "id", "")) if self.bot.user else "",
+        }
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
 

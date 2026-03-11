@@ -5,11 +5,14 @@ import os
 import json
 import logging
 import asyncio
+import datetime
 from config import TOKEN, SETTINGS_FILE
 from embeds import success_embed, error_embed
 from collections import defaultdict
 import time
 from database import init_db
+
+BOT_RUNTIME_FILE = "bot_runtime.json"
 
 # Logging Setup
 logging.basicConfig(
@@ -28,6 +31,18 @@ def load_settings():
 def save_settings(settings):
     with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
         json.dump(settings, f, indent=4, ensure_ascii=False)
+
+def write_runtime_status(online: bool, detail: str = ""):
+    payload = {
+        "online": bool(online),
+        "detail": str(detail or ""),
+        "last_seen": datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+    }
+    try:
+        with open(BOT_RUNTIME_FILE, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
 
 class MyBot(commands.Bot):
     def __init__(self):
@@ -78,6 +93,7 @@ class MyBot(commands.Bot):
 
     async def on_ready(self):
         logger.info(f'{self.user} ist bereit und online!')
+        write_runtime_status(True, "ready")
         try:
             synced = await self.tree.sync()
             logger.info(f'{len(synced)} globale Slash-Befehle synchronisiert!')
@@ -91,10 +107,17 @@ class MyBot(commands.Bot):
             )
         )
 
+    async def on_disconnect(self):
+        write_runtime_status(False, "disconnect")
+
+    async def on_resumed(self):
+        write_runtime_status(True, "resumed")
+
     @tasks.loop(seconds=5)
     async def settings_watcher(self):
         """Prueft alle 5 Sekunden ob das Dashboard einen Publish-Trigger gesetzt hat."""
         try:
+            write_runtime_status(True, "heartbeat")
             settings = load_settings()
             changed = False
 

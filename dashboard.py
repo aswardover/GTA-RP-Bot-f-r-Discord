@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+import streamlit.components.v1 as components
 import json
 import os
 import datetime
 import requests
 import discord
+import html
 from copy import deepcopy
 from urllib.parse import urlencode
 from config import SETTINGS_FILE, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DASHBOARD_REDIRECT_URI
@@ -13,6 +15,7 @@ from config import SETTINGS_FILE, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DASH
 DISCORD_DATA_FILE = "discord_data.json"
 TICKETS_STATE_FILE = "tickets_state.json"
 AUDIT_LOG_FILE = "dashboard_audit.json"
+BOT_RUNTIME_FILE = "bot_runtime.json"
 ADMIN_ID = "202768068617699328" # Deine Discord ID
 
 # Discord OAuth2 URLs
@@ -239,6 +242,16 @@ st.markdown("""
         padding: 0.12rem 0.55rem;
         margin-top: 0.25rem;
     }
+    .pill-err {
+        display: inline-block;
+        background: rgba(239,68,68,0.18);
+        color: #fca5a5;
+        border: 1px solid rgba(239,68,68,0.32);
+        border-radius: 999px;
+        font-size: 0.78rem;
+        padding: 0.12rem 0.55rem;
+        margin-top: 0.25rem;
+    }
     .section-title {
         margin-bottom: 0.1rem;
     }
@@ -334,15 +347,192 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 def render_brand_header():
+    runtime = _safe_read_json(BOT_RUNTIME_FILE, {})
+    online = bool(runtime.get("online", False)) if isinstance(runtime, dict) else False
+    brand_color = "#7ddc4d" if online else "#ef4444"
+    status_text = "Online" if online else "Offline"
+    status_class = "pill-ok" if online else "pill-err"
     logo_col, txt_col = st.columns([1, 8])
     with logo_col:
         if os.path.exists("logo.jpg"):
             st.image("logo.jpg", width=72)
     with txt_col:
         st.markdown(
-            '<div class="brand-wrap"><p class="brand-title">ASWARD Control Center</p><span class="pill-ok">Live</span></div>',
+            f'<div class="brand-wrap"><p class="brand-title" style="color:{brand_color};">ASWARD Control Center</p><span class="{status_class}">{status_text}</span></div>',
             unsafe_allow_html=True,
         )
+
+def _bot_runtime_status():
+    runtime = _safe_read_json(BOT_RUNTIME_FILE, {})
+    if not isinstance(runtime, dict):
+        return {"online": False, "last_seen": ""}
+    last_seen = str(runtime.get("last_seen") or "").strip()
+    online_flag = bool(runtime.get("online", False))
+    if not last_seen:
+        return {"online": online_flag, "last_seen": ""}
+    try:
+        dt = datetime.datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+        age = (datetime.datetime.now(datetime.timezone.utc) - dt).total_seconds()
+        return {"online": online_flag and age <= 20, "last_seen": last_seen}
+    except Exception:
+        return {"online": online_flag, "last_seen": last_seen}
+
+def _guild_members_for_selected(discord_data, server_entry):
+    guild_id = str((server_entry or {}).get("guild_id") or "").strip()
+    raw_guilds = discord_data.get("guilds", []) if isinstance(discord_data, dict) else []
+    if not isinstance(raw_guilds, list):
+        return []
+
+    def _extract_members(guild):
+        members = guild.get("members", []) if isinstance(guild, dict) else []
+        return members if isinstance(members, list) else []
+
+    if guild_id:
+        for guild in raw_guilds:
+            if isinstance(guild, dict) and str(guild.get("id") or guild.get("guild_id") or "").strip() == guild_id:
+                return _extract_members(guild)
+
+    label = str((server_entry or {}).get("label") or "").strip().lower()
+    if label:
+        for guild in raw_guilds:
+            if isinstance(guild, dict) and str(guild.get("name") or guild.get("guild_name") or "").strip().lower() == label:
+                return _extract_members(guild)
+    return []
+
+def _render_member_copy_list(members):
+    if not members:
+        st.info("Keine Mitgliederdaten verfügbar. Bot muss online sein und Daten exportieren.")
+        return
+
+    rows = []
+    for item in members:
+        if not isinstance(item, dict):
+            continue
+        user_id = str(item.get("id") or "").strip()
+        if not user_id:
+            continue
+        display_name = str(item.get("display_name") or item.get("name") or user_id)
+        is_online = bool(item.get("online", False))
+        status_dot = "#22c55e" if is_online else "#64748b"
+        safe_name = html.escape(display_name)
+        safe_id = html.escape(user_id)
+        rows.append(
+            f'<button class="member-copy-btn" data-user-id="{safe_id}"><span class="dot" style="background:{status_dot};"></span><span class="name">{safe_name}</span><span class="uid">{safe_id}</span></button>'
+        )
+
+    if not rows:
+        st.info("Keine Mitglieder gefunden.")
+        return
+
+    body = "".join(rows)
+    list_height = min(520, max(160, 54 + len(rows) * 36))
+    components.html(
+        f"""
+        <div class="member-copy-wrap">
+            <div class="member-copy-head">Mitgliederliste (klicken = ID kopieren)</div>
+            <div class="member-copy-list" style="max-height:{list_height}px;">{body}</div>
+            <div id="copy-toast" class="copy-toast">NutzerID kopiert</div>
+        </div>
+        <style>
+            .member-copy-wrap {{
+                border: 1px solid rgba(255,255,255,0.14);
+                border-radius: 12px;
+                background: rgba(255,255,255,0.03);
+                padding: 10px;
+                color: #fff;
+                font-family: Segoe UI, sans-serif;
+            }}
+            .member-copy-head {{
+                font-size: 0.9rem;
+                color: #c8d2f4;
+                margin-bottom: 8px;
+            }}
+            .member-copy-list {{
+                overflow: auto;
+                display: grid;
+                gap: 6px;
+            }}
+            .member-copy-btn {{
+                width: 100%;
+                border: 1px solid rgba(255,255,255,0.12);
+                background: rgba(16,25,45,0.7);
+                color: #fff;
+                border-radius: 8px;
+                padding: 8px 10px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                cursor: pointer;
+                text-align: left;
+            }}
+            .member-copy-btn:hover {{
+                background: rgba(95,124,255,0.18);
+                border-color: rgba(95,124,255,0.5);
+            }}
+            .member-copy-btn .dot {{
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                flex: 0 0 auto;
+            }}
+            .member-copy-btn .name {{
+                flex: 1;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }}
+            .member-copy-btn .uid {{
+                font-size: 0.78rem;
+                color: #9fb0d7;
+            }}
+            .copy-toast {{
+                margin-top: 8px;
+                padding: 6px 8px;
+                border-radius: 8px;
+                background: rgba(34,197,94,0.15);
+                color: #86efac;
+                border: 1px solid rgba(34,197,94,0.3);
+                display: none;
+                font-size: 0.82rem;
+            }}
+        </style>
+        <script>
+            (function() {{
+                const root = document.currentScript.parentElement;
+                const toast = root.querySelector('#copy-toast');
+                root.querySelectorAll('.member-copy-btn').forEach((btn) => {{
+                    btn.addEventListener('click', async () => {{
+                        const userId = btn.getAttribute('data-user-id') || '';
+                        if (!userId) return;
+                        try {{
+                            await navigator.clipboard.writeText(userId);
+                            toast.textContent = 'NutzerID kopiert';
+                            toast.style.display = 'block';
+                            setTimeout(() => {{ toast.style.display = 'none'; }}, 1200);
+                        }} catch (e) {{
+                            toast.textContent = 'Kopieren fehlgeschlagen';
+                            toast.style.display = 'block';
+                            setTimeout(() => {{ toast.style.display = 'none'; }}, 1500);
+                        }}
+                    }});
+                }});
+            }})();
+        </script>
+        """,
+        height=min(620, list_height + 110),
+    )
+
+def _enable_overview_autorefresh(interval_ms=8000):
+    components.html(
+        f"""
+        <script>
+            setTimeout(function() {{
+                window.parent.location.reload();
+            }}, {int(interval_ms)});
+        </script>
+        """,
+        height=0,
+    )
 
 def load_reaction_roles():
     if os.path.exists("reaction_roles.json"):
@@ -1066,7 +1256,9 @@ else:
         # ADMIN DASHBOARD
         render_brand_header()
         discord_data = raw_discord_data
-        st.sidebar.markdown("### ASWARD Modules")
+        runtime_status = _bot_runtime_status()
+        sidebar_brand_color = "#7ddc4d" if runtime_status.get("online") else "#ef4444"
+        st.sidebar.markdown(f"<h3 style='margin:0;color:{sidebar_brand_color};'>Asward-Helper</h3>", unsafe_allow_html=True)
         st.sidebar.caption("Steuere alle Bot-Systeme zentral")
         server_entries = accessible_server_entries if accessible_server_entries else all_server_entries
         display_labels = []
@@ -1283,8 +1475,20 @@ else:
         
         if page == "Übersicht":
             render_page_header("Bot Übersicht", "Schneller Überblick über Status und Kernmetriken.")
+            _enable_overview_autorefresh(8000)
+            refreshed_data = load_discord_data()
+            runtime = _bot_runtime_status()
             guild_stats = _guild_stats_for_selected(discord_data, selected_server_entry)
+            if isinstance(refreshed_data, dict):
+                guild_stats = _guild_stats_for_selected(refreshed_data, selected_server_entry)
             live_tickets = _live_ticket_count_for_selected(selected_server_entry)
+            members = _guild_members_for_selected(refreshed_data if isinstance(refreshed_data, dict) else discord_data, selected_server_entry)
+
+            if guild_stats.get("member_count", 0) <= 0 and members:
+                guild_stats["member_count"] = len(members)
+            if guild_stats.get("online_count", 0) <= 0 and members:
+                guild_stats["online_count"] = len([m for m in members if isinstance(m, dict) and bool(m.get("online", False))])
+
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Mitglieder", str(guild_stats.get("member_count", 0)))
@@ -1294,7 +1498,14 @@ else:
                 st.metric("Tickets", str(live_tickets))
             
             st.markdown("### Letzte Aktivitäten")
-            st.markdown('<div class="status-card">Bot erfolgreich gestartet. Alle Systeme laufen nominal.</div>', unsafe_allow_html=True)
+            state_text = "Bot online" if runtime.get("online") else "Bot offline"
+            state_color = "#86efac" if runtime.get("online") else "#fca5a5"
+            last_seen = runtime.get("last_seen") or "unbekannt"
+            st.markdown(
+                f'<div class="status-card"><b style="color:{state_color};">{state_text}</b><br/>Live-Refresh: alle 8 Sekunden<br/>Letztes Heartbeat: {last_seen}</div>',
+                unsafe_allow_html=True,
+            )
+            _render_member_copy_list(members)
 
         elif page == "Tickets":
             render_page_header("Ticketsystem", "Übersicht und pro Panel ein strukturierter Editor.")
