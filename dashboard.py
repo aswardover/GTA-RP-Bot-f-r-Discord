@@ -10,6 +10,7 @@ from config import SETTINGS_FILE, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DASH
 
 # --- KONFIGURATION ---
 DISCORD_DATA_FILE = "discord_data.json"
+TICKETS_STATE_FILE = "tickets_state.json"
 ADMIN_ID = "202768068617699328" # Deine Discord ID
 
 # Discord OAuth2 URLs
@@ -386,6 +387,45 @@ def _normalize_server_key(value):
     cleaned = "-".join([part for part in cleaned.split("-") if part])
     return cleaned or "default"
 
+def _write_raw_settings(raw_settings):
+    with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(raw_settings, f, indent=4, ensure_ascii=False)
+    _load_settings_cached.clear()
+
+def _register_dashboard_server(server_name, guild_id=None):
+    label = str(server_name or "").strip()
+    if not label:
+        return None
+    guild_id_str = str(guild_id or "").strip()
+    server_key = _normalize_server_key(guild_id_str or label)
+
+    raw_settings = _safe_read_json(SETTINGS_FILE, {})
+    servers = raw_settings.get("dashboard_servers", [])
+    if not isinstance(servers, list):
+        servers = []
+
+    updated = False
+    for item in servers:
+        if isinstance(item, dict) and _normalize_server_key(item.get("key") or item.get("guild_id") or item.get("label")) == server_key:
+            item["label"] = label
+            item["guild_id"] = guild_id_str
+            item["key"] = server_key
+            updated = True
+            break
+
+    if not updated:
+        servers.append({"label": label, "guild_id": guild_id_str, "key": server_key})
+
+    raw_settings["dashboard_servers"] = servers
+    profiles = raw_settings.get("server_profiles", {})
+    if not isinstance(profiles, dict):
+        profiles = {}
+    if server_key not in profiles:
+        profiles[server_key] = {}
+    raw_settings["server_profiles"] = profiles
+    _write_raw_settings(raw_settings)
+    return server_key
+
 def _build_server_entries(discord_data, settings):
     entries = []
     raw_guilds = discord_data.get("guilds", []) if isinstance(discord_data, dict) else []
@@ -393,21 +433,37 @@ def _build_server_entries(discord_data, settings):
         for name, gid in raw_guilds.items():
             label = str(name).strip() or f"Server {gid}"
             gid_str = str(gid).strip()
-            entries.append({"label": label, "key": _normalize_server_key(gid_str or label)})
+            entries.append({"label": label, "key": _normalize_server_key(gid_str or label), "guild_id": gid_str})
     elif isinstance(raw_guilds, list):
         for item in raw_guilds:
             if isinstance(item, dict):
                 label = str(item.get("name") or item.get("guild_name") or item.get("label") or "").strip()
                 gid = str(item.get("id") or item.get("guild_id") or "").strip()
                 if label or gid:
-                    entries.append({"label": label or f"Server {gid}", "key": _normalize_server_key(gid or label)})
+                    entries.append({"label": label or f"Server {gid}", "key": _normalize_server_key(gid or label), "guild_id": gid})
             elif isinstance(item, str) and item.strip():
                 label = item.strip()
-                entries.append({"label": label, "key": _normalize_server_key(label)})
+                entries.append({"label": label, "key": _normalize_server_key(label), "guild_id": ""})
+
+    manual_servers = settings.get("dashboard_servers", []) if isinstance(settings, dict) else []
+    if isinstance(manual_servers, list):
+        for item in manual_servers:
+            if isinstance(item, dict):
+                label = str(item.get("label") or "").strip()
+                gid = str(item.get("guild_id") or "").strip()
+                key = str(item.get("key") or "").strip()
+                if label or gid or key:
+                    entries.append(
+                        {
+                            "label": label or f"Server {gid}" if gid else "Neuer Server",
+                            "key": _normalize_server_key(key or gid or label),
+                            "guild_id": gid,
+                        }
+                    )
 
     if not entries:
         fallback_name = str(settings.get("dashboard_server_name", "ASWARD Server")).strip() or "ASWARD Server"
-        entries = [{"label": fallback_name, "key": "default"}]
+        entries = [{"label": fallback_name, "key": "default", "guild_id": ""}]
 
     unique = {}
     for entry in entries:
@@ -427,6 +483,56 @@ def _allowed_ids_for_server(raw_settings, server_key):
     profile = profiles.get(server_key, {}) if isinstance(profiles, dict) else {}
     allowed = profile.get("dashboard_allowed_users", []) if isinstance(profile, dict) else []
     return {str(x).strip() for x in allowed if str(x).strip()}
+
+def _set_allowed_ids_for_server(server_key, allowed_ids):
+    raw_settings = _safe_read_json(SETTINGS_FILE, {})
+    profiles = raw_settings.get("server_profiles", {})
+    if not isinstance(profiles, dict):
+        profiles = {}
+    profile = profiles.get(server_key, {})
+    if not isinstance(profile, dict):
+        profile = {}
+    profile["dashboard_allowed_users"] = [str(x).strip() for x in (allowed_ids or []) if str(x).strip()]
+    profiles[server_key] = profile
+    raw_settings["server_profiles"] = profiles
+    _write_raw_settings(raw_settings)
+
+def _guild_stats_for_selected(discord_data, server_entry):
+    guild_id = str((server_entry or {}).get("guild_id") or "").strip()
+    raw_guilds = discord_data.get("guilds", []) if isinstance(discord_data, dict) else []
+    if not isinstance(raw_guilds, list):
+        return {"member_count": 0, "online_count": 0}
+
+    if guild_id:
+        for guild in raw_guilds:
+            if isinstance(guild, dict) and str(guild.get("id") or guild.get("guild_id") or "").strip() == guild_id:
+                return {
+                    "member_count": int(guild.get("member_count") or 0),
+                    "online_count": int(guild.get("online_count") or 0),
+                }
+
+    label = str((server_entry or {}).get("label") or "").strip().lower()
+    if label:
+        for guild in raw_guilds:
+            if isinstance(guild, dict) and str(guild.get("name") or guild.get("guild_name") or "").strip().lower() == label:
+                return {
+                    "member_count": int(guild.get("member_count") or 0),
+                    "online_count": int(guild.get("online_count") or 0),
+                }
+    return {"member_count": 0, "online_count": 0}
+
+def _live_ticket_count_for_selected(server_entry):
+    state = _safe_read_json(TICKETS_STATE_FILE, {})
+    if not isinstance(state, dict):
+        return 0
+    guild_id = str((server_entry or {}).get("guild_id") or "").strip()
+    if not guild_id:
+        return len(state)
+    return sum(
+        1
+        for info in state.values()
+        if isinstance(info, dict) and str(info.get("guild_id") or "").strip() == guild_id
+    )
 
 def load_settings():
     return _load_settings_cached(_settings_version_token())
@@ -709,6 +815,18 @@ def get_discord_auth_url():
     url = DISCORD_AUTH_URL + "?" + urlencode(params)
     return url
 
+def get_bot_invite_url(guild_id=None, permissions="8", disable_guild_select=False):
+    params = {
+        "client_id": DISCORD_CLIENT_ID,
+        "scope": "bot applications.commands",
+        "permissions": str(permissions or "8"),
+    }
+    guild_id_str = str(guild_id or "").strip()
+    if guild_id_str:
+        params["guild_id"] = guild_id_str
+        params["disable_guild_select"] = "true" if disable_guild_select else "false"
+    return f"https://discord.com/oauth2/authorize?{urlencode(params)}"
+
 def exchange_code_for_token(code):
     data = {
         "client_id": DISCORD_CLIENT_ID,
@@ -810,6 +928,7 @@ else:
         server_entries = accessible_server_entries if accessible_server_entries else all_server_entries
         display_labels = []
         display_to_key = {}
+        display_to_entry = {}
         seen_labels = set()
         for entry in server_entries:
             label = entry["label"]
@@ -819,22 +938,76 @@ else:
             seen_labels.add(label)
             display_labels.append(label)
             display_to_key[label] = key
+            display_to_entry[label] = entry
 
-        if "sidebar_server_choice" not in st.session_state or st.session_state.sidebar_server_choice not in display_labels:
+        add_server_option = "Server Hinzufuegen"
+        server_dropdown_options = [add_server_option] + display_labels
+
+        if "sidebar_server_choice" not in st.session_state or st.session_state.sidebar_server_choice not in server_dropdown_options:
             st.session_state.sidebar_server_choice = display_labels[0]
 
-        chosen_server_label = st.sidebar.selectbox(
+        selected_dropdown_option = st.sidebar.selectbox(
             "Server auswaehlen",
-            display_labels,
-            index=display_labels.index(st.session_state.sidebar_server_choice),
+            server_dropdown_options,
+            index=server_dropdown_options.index(st.session_state.sidebar_server_choice),
             key="sidebar_server_choice",
         )
-        selected_server_key = display_to_key[chosen_server_label]
+
+        if selected_dropdown_option == add_server_option:
+            chosen_server_label = st.session_state.get("active_server_label", display_labels[0])
+            selected_server_key = st.session_state.get("active_server_key", display_to_key.get(chosen_server_label, display_to_key[display_labels[0]]))
+            selected_server_entry = display_to_entry.get(chosen_server_label, {"label": chosen_server_label, "key": selected_server_key, "guild_id": ""})
+
+            st.sidebar.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
+            st.sidebar.markdown("#### Server Hinzufuegen")
+            if is_root_admin:
+                new_server_name = st.sidebar.text_input("Servername", key="new_server_name")
+                new_server_id = st.sidebar.text_input("Server-ID (optional)", key="new_server_id")
+                invite_permissions = st.sidebar.text_input(
+                    "Invite-Berechtigungen (Integer)",
+                    value=str(raw_settings.get("bot_invite_permissions", "8")),
+                    key="new_server_permissions",
+                )
+                disable_guild_select = st.sidebar.checkbox("Server im Invite fixieren", value=False, key="new_server_disable_select")
+                invite_link = get_bot_invite_url(
+                    guild_id=new_server_id.strip() if new_server_id.strip() else None,
+                    permissions=invite_permissions,
+                    disable_guild_select=disable_guild_select,
+                )
+                st.sidebar.markdown(f"[Bot auf Server einladen]({invite_link})")
+                st.sidebar.code(invite_link)
+
+                if st.sidebar.button("Server speichern", key="save_new_server_btn"):
+                    if not new_server_name.strip():
+                        st.sidebar.error("Bitte gib einen Servernamen an.")
+                    else:
+                        created_key = _register_dashboard_server(new_server_name.strip(), new_server_id.strip())
+                        if created_key:
+                            st.session_state.active_server_key = created_key
+                            st.session_state.active_server_label = new_server_name.strip()
+                            st.session_state.sidebar_server_choice = new_server_name.strip()
+                            st.sidebar.success("Server angelegt. Du kannst ihn jetzt konfigurieren.")
+                            st.rerun()
+            else:
+                st.sidebar.info("Nur die Owner-ID kann neue Serverprofile anlegen.")
+        else:
+            chosen_server_label = selected_dropdown_option
+            selected_server_key = display_to_key[chosen_server_label]
+            selected_server_entry = display_to_entry.get(chosen_server_label, {"label": chosen_server_label, "key": selected_server_key, "guild_id": ""})
+
         st.session_state.active_server_key = selected_server_key
         st.session_state.active_server_label = chosen_server_label
+        st.session_state.active_server_entry = selected_server_entry
 
         settings = _effective_settings_for_server(raw_settings, selected_server_key)
         settings["dashboard_server_name"] = chosen_server_label
+
+        with st.sidebar.expander("Anleitung", expanded=False):
+            st.markdown("1. Waehle links oben den Server im Dropdown aus.")
+            st.markdown("2. Fuer neue Server zuerst Server Hinzufuegen nutzen und Bot ueber den Link einladen.")
+            st.markdown("3. Danach den Server wieder im Dropdown auswaehlen und Module konfigurieren.")
+            st.markdown("4. Jede Konfiguration wird im eigenen Server-Profil gespeichert und nicht uebernommen.")
+            st.markdown("5. Dashboard-Zugriffe pro Server verwaltest du in Einstellungen.")
 
         st.sidebar.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
 
@@ -938,13 +1111,15 @@ else:
         
         if page == "Übersicht":
             render_page_header("Bot Übersicht", "Schneller Ueberblick ueber Status und Kernmetriken.")
+            guild_stats = _guild_stats_for_selected(discord_data, selected_server_entry)
+            live_tickets = _live_ticket_count_for_selected(selected_server_entry)
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Status", "Online", delta="Aktiv")
+                st.metric("Mitglieder", str(guild_stats.get("member_count", 0)))
             with col2:
-                st.metric("Server", "1", delta="Verbunden")
+                st.metric("Online", str(guild_stats.get("online_count", 0)))
             with col3:
-                st.metric("Tickets", settings.get("ticket_count", 0))
+                st.metric("Tickets", str(live_tickets))
             
             st.markdown("### Letzte Aktivitäten")
             st.markdown('<div class="status-card">Bot erfolgreich gestartet. Alle Systeme laufen nominal.</div>', unsafe_allow_html=True)
@@ -1561,14 +1736,8 @@ else:
         elif page == "Einstellungen":
             render_page_header("Allgemeine Einstellungen", "Globale Basiswerte fuer Prefix und Kern-Module.")
             active_server_label = st.session_state.get("active_server_label", settings.get("dashboard_server_name", "ASWARD Server"))
+            active_server_key = st.session_state.get("active_server_key", "default")
             st.info(f"Aktiver Server-Kontext: {active_server_label}")
-
-            with st.expander("Anleitung: Server-Umschalter sinnvoll nutzen", expanded=False):
-                st.markdown("1. Waehle links oben den Server im Dropdown aus.")
-                st.markdown("2. Passe Module an und speichere wie gewohnt.")
-                st.markdown("3. Einstellungen werden automatisch im Server-Profil gespeichert.")
-                st.markdown("4. Beim Wechsel des Servers werden dessen gespeicherte Werte geladen.")
-                st.markdown("5. Publish-Buttons arbeiten weiterhin mit den Werten des aktuell gewaehlten Servers.")
 
             st.subheader("Basis-Einstellungen")
             automod_enabled = st.checkbox("Automod global aktivieren", value=settings.get("automod_enabled", False))
@@ -1584,7 +1753,7 @@ else:
 
             st.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
             st.subheader("Dashboard-Zugriff pro Server")
-            current_allowed_ids = [str(x) for x in settings.get("dashboard_allowed_users", []) if str(x).strip()]
+            current_allowed_ids = sorted(list(_allowed_ids_for_server(raw_settings, active_server_key)))
             if is_root_admin:
                 allowed_input = st.text_input(
                     "Discord User IDs mit Dashboard-Zugriff (komma-separiert)",
@@ -1593,8 +1762,7 @@ else:
                 )
                 st.caption("Nur deine Owner-ID kann diese Liste bearbeiten.")
                 if st.button("Dashboard-Benutzer speichern"):
-                    settings["dashboard_allowed_users"] = parse_id_list(allowed_input)
-                    save_settings(settings)
+                    _set_allowed_ids_for_server(active_server_key, parse_id_list(allowed_input))
                     st.success("Zugriffsrechte fuer den ausgewaehlten Server gespeichert.")
                     st.rerun()
             else:

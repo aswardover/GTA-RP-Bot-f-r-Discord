@@ -32,9 +32,40 @@ class DataExporter(commands.Cog):
     async def on_guild_role_delete(self, role):
         await self.export_data()
 
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        await self.export_data()
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member):
+        await self.export_data()
+
+    @commands.Cog.listener()
+    async def on_presence_update(self, before, after):
+        await self.export_data()
+
+    @commands.Cog.listener()
+    async def on_member_update(self, before, after):
+        await self.export_data()
+
     async def export_data(self):
-        data = {"channels": [], "roles": [], "categories": []}
+        data = {"channels": [], "roles": [], "categories": [], "guilds": []}
         for guild in self.bot.guilds:
+            online_count = 0
+            try:
+                online_count = sum(1 for m in guild.members if not m.bot and getattr(m, "status", discord.Status.offline) != discord.Status.offline)
+            except Exception:
+                online_count = 0
+
+            data["guilds"].append(
+                {
+                    "id": str(guild.id),
+                    "name": guild.name,
+                    "member_count": int(guild.member_count or 0),
+                    "online_count": int(online_count),
+                }
+            )
+
             for channel in sorted(guild.text_channels, key=lambda c: c.position):
                 data["channels"].append({
                     "id": str(channel.id),

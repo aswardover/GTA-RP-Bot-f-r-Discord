@@ -228,6 +228,7 @@ class Tickets(commands.Cog):
         await ticket_channel.send(embed=embed, view=TicketControlView(self))
 
         state[str(ticket_channel.id)] = {
+            "guild_id": guild.id,
             "creator_id": user.id,
             "creator_tag": str(user),
             "option_name": option.get("name"),

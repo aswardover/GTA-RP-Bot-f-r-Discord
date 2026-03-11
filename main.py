@@ -33,6 +33,7 @@ class MyBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.members = True
+        intents.presences = True
         intents.message_content = True
         intents.guilds = True
         intents.reactions = True  # Für Reaction Roles
