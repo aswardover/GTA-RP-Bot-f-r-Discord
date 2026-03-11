@@ -2,6 +2,7 @@
 import streamlit as st
 import json
 import os
+import datetime
 import requests
 import discord
 from copy import deepcopy
@@ -11,6 +12,7 @@ from config import SETTINGS_FILE, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DASH
 # --- KONFIGURATION ---
 DISCORD_DATA_FILE = "discord_data.json"
 TICKETS_STATE_FILE = "tickets_state.json"
+AUDIT_LOG_FILE = "dashboard_audit.json"
 ADMIN_ID = "202768068617699328" # Deine Discord ID
 
 # Discord OAuth2 URLs
@@ -360,6 +362,108 @@ def _safe_read_json(path, fallback):
             return json.load(f)
     except Exception:
         return deepcopy(fallback)
+
+def _append_audit_entry(module, action, details=None, status="ok"):
+    entries = _safe_read_json(AUDIT_LOG_FILE, [])
+    if not isinstance(entries, list):
+        entries = []
+
+    actor_id = str(st.session_state.get("user_id") or "unknown")
+    server_key = str(st.session_state.get("active_server_key") or "default")
+    server_label = str(st.session_state.get("active_server_label") or "-")
+    entry = {
+        "ts": datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "module": str(module),
+        "action": str(action),
+        "status": str(status),
+        "server_key": server_key,
+        "server_label": server_label,
+        "actor_id": actor_id,
+        "details": str(details or ""),
+    }
+    entries.insert(0, entry)
+    entries = entries[:500]
+    with open(AUDIT_LOG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(entries, f, indent=2, ensure_ascii=False)
+
+def _read_audit_entries(server_key=None, limit=100):
+    entries = _safe_read_json(AUDIT_LOG_FILE, [])
+    if not isinstance(entries, list):
+        return []
+    if server_key:
+        entries = [e for e in entries if isinstance(e, dict) and str(e.get("server_key")) == str(server_key)]
+    return entries[:max(1, int(limit))]
+
+def _push_undo_snapshot(settings, snapshot_key, payload):
+    undo_root = settings.get("dashboard_undo", {}) if isinstance(settings.get("dashboard_undo"), dict) else {}
+    stack = undo_root.get(snapshot_key, []) if isinstance(undo_root.get(snapshot_key), list) else []
+    stack.append(deepcopy(payload))
+    undo_root[snapshot_key] = stack[-5:]
+    settings["dashboard_undo"] = undo_root
+
+def _pop_undo_snapshot(settings, snapshot_key):
+    undo_root = settings.get("dashboard_undo", {}) if isinstance(settings.get("dashboard_undo"), dict) else {}
+    stack = undo_root.get(snapshot_key, []) if isinstance(undo_root.get(snapshot_key), list) else []
+    if not stack:
+        return None
+    payload = stack.pop()
+    undo_root[snapshot_key] = stack
+    settings["dashboard_undo"] = undo_root
+    return payload
+
+def _preview_text(template_text, channel_hint="#channel"):
+    text = str(template_text or "")
+    return (
+        text.replace("{user}", "@User")
+        .replace("{server}", str(st.session_state.get("active_server_label") or "Server"))
+        .replace("{channel}", channel_hint)
+    )
+
+def _normalize_custom_command(raw):
+    item = raw if isinstance(raw, dict) else {}
+    return {
+        "name": str(item.get("name", "")).strip(),
+        "response": str(item.get("response", "")).strip(),
+        "send_as_embed": bool(item.get("send_as_embed", True)),
+        "target_channel_id": str(item.get("target_channel_id", "") or "").strip(),
+        "allowed_roles": [str(x) for x in (item.get("allowed_roles", []) if isinstance(item.get("allowed_roles"), list) else []) if str(x).strip()],
+    }
+
+def _normalize_if_rule(raw):
+    item = raw if isinstance(raw, dict) else {}
+    event = str(item.get("event", "role_add"))
+    if event not in ("role_add", "role_remove"):
+        event = "role_add"
+    return {
+        "event": event,
+        "role": str(item.get("role", "")).strip(),
+        "action": "send_message",
+        "channel": str(item.get("channel", "")).strip(),
+        "message": str(item.get("message", "")).strip(),
+        "allowed_roles": [str(x) for x in (item.get("allowed_roles", []) if isinstance(item.get("allowed_roles"), list) else []) if str(x).strip()],
+    }
+
+def _normalize_reaction_panel(raw, idx=0):
+    item = raw if isinstance(raw, dict) else {}
+    base_items = item.get("items", []) if isinstance(item.get("items"), list) else []
+    cleaned_items = []
+    for sub in base_items:
+        if not isinstance(sub, dict):
+            continue
+        emoji = str(sub.get("emoji", "")).strip()
+        role_id = str(sub.get("role_id", "")).strip()
+        if emoji and role_id:
+            cleaned_items.append({"emoji": emoji, "role_id": role_id})
+    return {
+        "name": str(item.get("name", f"Reaktionsrollen Panel {idx + 1}")).strip() or f"Reaktionsrollen Panel {idx + 1}",
+        "enabled": bool(item.get("enabled", False)),
+        "channel_id": str(item.get("channel_id", "")).strip(),
+        "title": str(item.get("title", "Wähle deine Rollen")).strip() or "Wähle deine Rollen",
+        "description": str(item.get("description", "Reagiere mit Emojis um Rollen zu bekommen.")).strip() or "Reagiere mit Emojis um Rollen zu bekommen.",
+        "color": str(item.get("color", "#8a2be2")).strip() or "#8a2be2",
+        "items": cleaned_items,
+        "allowed_roles": [str(x) for x in (item.get("allowed_roles", []) if isinstance(item.get("allowed_roles"), list) else []) if str(x).strip()],
+    }
 
 @st.cache_data(ttl=3)
 def _load_settings_cached(version_token):
@@ -1064,12 +1168,13 @@ else:
             "Logging": "Logging",
             "Embed Hub": "Embed Hub",
             "Settings": "Einstellungen",
+            "Audit-Logs": "Audit-Logs",
         }
         nav_sections = [
             ("Grundlegende Informationen", ["Overview", "Tickets", "Stempeluhr"]),
             ("Server-Verwaltung", ["Server Tools", "Auto Mod", "Warns/Sanktionen", "Logging"]),
             ("Community", ["Ankündigungen", "Reaction Roles", "Custom Commands", "Umfragen", "Giveaway", "If Rules", "Embed Hub"]),
-            ("System", ["Settings"]),
+            ("System", ["Settings", "Audit-Logs"]),
         ]
         nav_icon_map = {
             "Overview": "◉",
@@ -1087,6 +1192,7 @@ else:
             "Logging": "⎘",
             "Embed Hub": "◈",
             "Settings": "⚙",
+            "Audit-Logs": "🧾",
         }
         nav_display_map = {
             "Overview": "Übersicht",
@@ -1104,6 +1210,7 @@ else:
             "Logging": "Protokolle",
             "Embed Hub": "Embed-Vorlagen",
             "Settings": "Einstellungen",
+            "Audit-Logs": "Audit-Logs",
         }
 
         nav_options = list(page_map.keys())
@@ -1756,12 +1863,22 @@ else:
                     untimeout_enabled,
                 ])
                 save_settings(settings)
+                _append_audit_entry("Server Tools", "Einstellungen gespeichert", f"Aktive Tools: {sum([slowmode_enabled, lock_enabled, unlock_enabled, timeout_enabled, untimeout_enabled])}")
                 st.success("Server Tools gespeichert.")
 
         elif page == "Wenn-Funktionen":
             render_page_header("Wenn-Funktionen", "Eventbasierte Regeln für Rollen-Events und Auto-Aktionen.")
             custom_rules = settings.get("custom_rules", []) if isinstance(settings.get("custom_rules"), list) else []
+            custom_rules = [_normalize_if_rule(r) for r in custom_rules]
+            settings["custom_rules"] = custom_rules
             custom_enabled = st.checkbox("Wenn-Funktionen aktivieren", value=settings.get("custom_rules_enabled", False))
+            ifrules_scope_role_names = st.multiselect(
+                "Regeln nur für Mitglieder mit diesen Rollen (optional)",
+                options=list(roles_map.keys()),
+                default=names_for_ids(roles_map, settings.get("if_rules_scope_roles", [])),
+                key="ifrules_scope_roles",
+            )
+            ifrules_scope_roles = [str(roles_map[name]) for name in ifrules_scope_role_names if name in roles_map]
 
             if "ifrules_editor_open" not in st.session_state:
                 st.session_state.ifrules_editor_open = False
@@ -1773,6 +1890,7 @@ else:
                 list_col, action_col = st.columns([8, 2])
                 with action_col:
                     if st.button("+ Regel erstellen", key="ifrules_new"):
+                        _push_undo_snapshot(settings, "if_rules", settings.get("custom_rules", []))
                         custom_rules.append(
                             {
                                 "event": "role_add",
@@ -1780,19 +1898,34 @@ else:
                                 "action": "send_message",
                                 "channel": "",
                                 "message": "Hallo {user}",
+                                "allowed_roles": [],
                             }
                         )
                         settings["custom_rules"] = custom_rules
                         settings["custom_rules_enabled"] = custom_enabled
+                        settings["if_rules_scope_roles"] = ifrules_scope_roles
                         save_settings(settings)
+                        _append_audit_entry("Wenn-Funktionen", "Regel erstellt", f"Regeln: {len(custom_rules)}")
                         st.session_state.ifrules_selected_index = len(custom_rules) - 1
                         st.session_state.ifrules_editor_open = True
                         st.rerun()
                     delete_marked = st.button("Markierte löschen", key="ifrules_delete_marked", type="secondary")
                     if st.button("Status speichern", key="ifrules_save_status"):
                         settings["custom_rules_enabled"] = custom_enabled
+                        settings["if_rules_scope_roles"] = ifrules_scope_roles
                         save_settings(settings)
+                        _append_audit_entry("Wenn-Funktionen", "Status gespeichert", f"Aktiv: {custom_enabled}")
                         st.success("Wenn-Funktionen gespeichert.")
+                    if st.button("Letzte Änderung rückgängig", key="ifrules_undo", type="secondary"):
+                        restored = _pop_undo_snapshot(settings, "if_rules")
+                        if restored is None:
+                            st.warning("Keine rückgängig machbare Änderung vorhanden.")
+                        else:
+                            settings["custom_rules"] = [_normalize_if_rule(r) for r in restored]
+                            save_settings(settings)
+                            _append_audit_entry("Wenn-Funktionen", "Rückgängig", "Letzte Änderung wiederhergestellt")
+                            st.success("Letzte Änderung wurde rückgängig gemacht.")
+                            st.rerun()
 
                 if delete_marked:
                     keep_rules = [
@@ -1802,10 +1935,13 @@ else:
                     if len(keep_rules) == len(custom_rules):
                         st.warning("Keine Regel zum Löschen markiert.")
                     else:
+                        _push_undo_snapshot(settings, "if_rules", custom_rules)
                         custom_rules = keep_rules
                         settings["custom_rules"] = custom_rules
                         settings["custom_rules_enabled"] = custom_enabled
+                        settings["if_rules_scope_roles"] = ifrules_scope_roles
                         save_settings(settings)
+                        _append_audit_entry("Wenn-Funktionen", "Regeln gelöscht", f"Verbleibend: {len(custom_rules)}")
                         st.success("Markierte Regeln wurden gelöscht.")
                         st.rerun()
 
@@ -1869,6 +2005,15 @@ else:
                     key="ifrules_message",
                     placeholder="Verwende {user} und {server}",
                 )
+                allowed_role_names = st.multiselect(
+                    "Nur ausführen, wenn Mitglied eine dieser Rollen hat (optional)",
+                    options=list(roles_map.keys()),
+                    default=names_for_ids(roles_map, rule.get("allowed_roles", [])),
+                    key="ifrules_allowed_roles",
+                )
+                allowed_role_ids = [str(roles_map[name]) for name in allowed_role_names if name in roles_map]
+                st.caption("Vorschau")
+                st.code(_preview_text(message, "#ziel-kanal"), language="text")
 
                 if back_btn or discard_btn:
                     st.session_state.ifrules_editor_open = False
@@ -1882,16 +2027,20 @@ else:
                     elif not message.strip():
                         st.error("Bitte eine Nachricht eintragen.")
                     else:
+                        _push_undo_snapshot(settings, "if_rules", custom_rules)
                         custom_rules[selected_idx] = {
                             "event": event,
                             "role": str(role_id_value),
                             "action": "send_message",
                             "channel": str(selected_channel_id),
                             "message": message,
+                            "allowed_roles": allowed_role_ids,
                         }
                         settings["custom_rules"] = custom_rules
                         settings["custom_rules_enabled"] = custom_enabled
+                        settings["if_rules_scope_roles"] = ifrules_scope_roles
                         save_settings(settings)
+                        _append_audit_entry("Wenn-Funktionen", "Regel gespeichert", f"Regel {selected_idx + 1}")
                         st.success("Regel gespeichert.")
                         st.session_state.ifrules_editor_open = False
                         st.rerun()
@@ -1957,32 +2106,49 @@ else:
             rr_data = load_reaction_roles()
 
             rr_panels = settings.get("reaction_role_panels", []) if isinstance(settings.get("reaction_role_panels"), list) else []
+            rr_panels = [_normalize_reaction_panel(panel, idx) for idx, panel in enumerate(rr_panels)]
+            settings["reaction_role_panels"] = rr_panels
+            rr_scope_role_names = st.multiselect(
+                "Reaktionsrollen nur für Mitglieder mit diesen Rollen (optional)",
+                options=list(roles_map.keys()),
+                default=names_for_ids(roles_map, settings.get("reaction_roles_allowed_roles", [])),
+                key="rr_scope_roles",
+            )
+            rr_scope_roles = [str(roles_map[name]) for name in rr_scope_role_names if name in roles_map]
             if "reaction_roles_editor_open" not in st.session_state:
                 st.session_state.reaction_roles_editor_open = False
             if "reaction_roles_selected_index" not in st.session_state:
                 st.session_state.reaction_roles_selected_index = 0
             
-            async def _send_reaction_role(ch_id: int, embed: discord.Embed, emoji_role_map: dict):
+            async def _send_reaction_role(ch_id: int, embed: discord.Embed, emoji_role_map: dict, allowed_roles: list[str]):
                 # Runs in the bot event loop.
                 bot = st.session_state.get("bot")
                 if bot is None:
                     return
                 chan = bot.get_channel(ch_id)
                 if chan is None:
+                    _append_audit_entry("Reaktionsrollen", "Publish fehlgeschlagen", f"Kanal {ch_id} nicht gefunden", status="failed")
                     return
                 msg = await chan.send(embed=embed)
                 for emoji in emoji_role_map.keys():
                     await msg.add_reaction(emoji)
                 rr_data[str(msg.id)] = emoji_role_map
                 save_reaction_roles(rr_data)
+                raw_settings_local = _safe_read_json(SETTINGS_FILE, {})
+                meta = raw_settings_local.get("reaction_role_message_meta", {}) if isinstance(raw_settings_local.get("reaction_role_message_meta"), dict) else {}
+                meta[str(msg.id)] = {"allowed_roles": [str(x) for x in (allowed_roles or []) if str(x).strip()]}
+                raw_settings_local["reaction_role_message_meta"] = meta
+                _write_raw_settings(raw_settings_local)
                 from database import add_reaction_role
                 await add_reaction_role(str(msg.id), json.dumps(emoji_role_map))
+                _append_audit_entry("Reaktionsrollen", "Publish erfolgreich", f"Nachricht {msg.id} gesendet", status="sent")
 
             if not st.session_state.reaction_roles_editor_open:
                 st.subheader("Panel-Übersicht")
                 list_col, action_col = st.columns([8, 2])
                 with action_col:
                     if st.button("+ Panel erstellen", key="rr_new"):
+                        _push_undo_snapshot(settings, "reaction_roles", rr_panels)
                         rr_panels.append(
                             {
                                 "name": f"Reaktionsrollen Panel {len(rr_panels) + 1}",
@@ -1996,15 +2162,29 @@ else:
                         )
                         settings["reaction_role_panels"] = rr_panels
                         settings["reaction_roles_enabled"] = reaction_roles_enabled
+                        settings["reaction_roles_allowed_roles"] = rr_scope_roles
                         save_settings(settings)
+                        _append_audit_entry("Reaktionsrollen", "Panel erstellt", f"Panels: {len(rr_panels)}")
                         st.session_state.reaction_roles_selected_index = len(rr_panels) - 1
                         st.session_state.reaction_roles_editor_open = True
                         st.rerun()
                     delete_marked = st.button("Markierte löschen", key="rr_delete_marked", type="secondary")
                     if st.button("Status speichern", key="rr_save_status"):
                         settings["reaction_roles_enabled"] = reaction_roles_enabled
+                        settings["reaction_roles_allowed_roles"] = rr_scope_roles
                         save_settings(settings)
+                        _append_audit_entry("Reaktionsrollen", "Status gespeichert", f"Aktiv: {reaction_roles_enabled}")
                         st.success("Reaktionsrollen gespeichert.")
+                    if st.button("Letzte Änderung rückgängig", key="rr_undo", type="secondary"):
+                        restored = _pop_undo_snapshot(settings, "reaction_roles")
+                        if restored is None:
+                            st.warning("Keine rückgängig machbare Änderung vorhanden.")
+                        else:
+                            settings["reaction_role_panels"] = [_normalize_reaction_panel(p, i) for i, p in enumerate(restored)]
+                            save_settings(settings)
+                            _append_audit_entry("Reaktionsrollen", "Rückgängig", "Letzte Änderung wiederhergestellt")
+                            st.success("Letzte Änderung wurde rückgängig gemacht.")
+                            st.rerun()
 
                 if delete_marked:
                     keep_panels = [
@@ -2014,10 +2194,13 @@ else:
                     if len(keep_panels) == len(rr_panels):
                         st.warning("Kein Panel zum Löschen markiert.")
                     else:
+                        _push_undo_snapshot(settings, "reaction_roles", rr_panels)
                         rr_panels = keep_panels
                         settings["reaction_role_panels"] = rr_panels
                         settings["reaction_roles_enabled"] = reaction_roles_enabled
+                        settings["reaction_roles_allowed_roles"] = rr_scope_roles
                         save_settings(settings)
+                        _append_audit_entry("Reaktionsrollen", "Panels gelöscht", f"Verbleibend: {len(rr_panels)}")
                         st.success("Markierte Reaktionsrollen-Panels wurden gelöscht.")
                         st.rerun()
 
@@ -2073,6 +2256,15 @@ else:
                 role1 = select_role_id("Rolle 1", roles_map, item1.get("role_id"), "rr_role1")
                 emoji2 = st.text_input("Emoji 2", value=str(item2.get("emoji", "🔵")), key="rr_emoji2")
                 role2 = select_role_id("Rolle 2", roles_map, item2.get("role_id"), "rr_role2")
+                panel_allowed_names = st.multiselect(
+                    "Nur für Mitglieder mit diesen Rollen (optional)",
+                    options=list(roles_map.keys()),
+                    default=names_for_ids(roles_map, panel.get("allowed_roles", [])),
+                    key="rr_panel_allowed_roles",
+                )
+                panel_allowed_roles = [str(roles_map[name]) for name in panel_allowed_names if name in roles_map]
+                st.caption("Vorschau")
+                st.code(f"Titel: {title}\nBeschreibung: {_preview_text(description, '#reaktion-kanal')}", language="text")
 
                 if back_btn or discard_btn:
                     st.session_state.reaction_roles_editor_open = False
@@ -2094,11 +2286,13 @@ else:
                             "description": description,
                             "color": color,
                             "items": items_built,
+                            "allowed_roles": panel_allowed_roles,
                         }
                     )
                     rr_panels[selected_idx] = panel
                     settings["reaction_role_panels"] = rr_panels
                     settings["reaction_roles_enabled"] = reaction_roles_enabled
+                    settings["reaction_roles_allowed_roles"] = rr_scope_roles
 
                     if publish_btn:
                         if not rr_channel_id or not title:
@@ -2118,14 +2312,18 @@ else:
                                 else:
                                     emoji_role_map = {item["emoji"]: item["role_id"] for item in items_built}
                                     embed = discord.Embed(title=title, description=description, color=parsed_color)
-                                    bot.loop.create_task(_send_reaction_role(int(rr_channel_id), embed, emoji_role_map))
+                                    effective_allowed = list(dict.fromkeys(rr_scope_roles + panel_allowed_roles))
+                                    _append_audit_entry("Reaktionsrollen", "Publish gestartet", f"Panel {panel_name}", status="queued")
+                                    bot.loop.create_task(_send_reaction_role(int(rr_channel_id), embed, emoji_role_map, effective_allowed))
                                     panel["enabled"] = True
                                     rr_panels[selected_idx] = panel
                                     settings["reaction_role_panels"] = rr_panels
                                     save_settings(settings)
                                     st.success("Reaktionsrollen-Nachricht wird gesendet!")
                     else:
+                        _push_undo_snapshot(settings, "reaction_roles", rr_panels)
                         save_settings(settings)
+                        _append_audit_entry("Reaktionsrollen", "Panel gespeichert", panel_name)
                         st.success("Reaktionsrollen-Panel gespeichert.")
 
         elif page == "Umfragen":
@@ -2224,6 +2422,42 @@ else:
                 st.code("\n".join(current_allowed_ids) if current_allowed_ids else "Keine weiteren Benutzer freigegeben.")
                 st.info("Nur die Owner-ID kann Dashboard-Benutzer je Server hinzufügen oder entfernen.")
 
+        elif page == "Audit-Logs":
+            render_page_header("Audit-Logs", "Status, Änderungen und Aktionen pro Server nachvollziehen.")
+            current_server_key = st.session_state.get("active_server_key", "default")
+            only_current_server = st.checkbox("Nur aktuellen Server anzeigen", value=True)
+            max_rows = st.slider("Einträge", min_value=20, max_value=300, value=120, step=20)
+            entries = _read_audit_entries(current_server_key if only_current_server else None, max_rows)
+
+            status_col1, status_col2, status_col3 = st.columns(3)
+            queued = len([e for e in entries if str(e.get("status")) == "queued"])
+            sent = len([e for e in entries if str(e.get("status")) == "sent"])
+            failed = len([e for e in entries if str(e.get("status")) == "failed"])
+            with status_col1:
+                st.metric("Queued", str(queued))
+            with status_col2:
+                st.metric("Sent", str(sent))
+            with status_col3:
+                st.metric("Failed", str(failed))
+
+            if not entries:
+                st.info("Noch keine Audit-Einträge vorhanden.")
+            else:
+                for idx, item in enumerate(entries):
+                    st.markdown(
+                        f"<div class='ticket-panel-card'><div class='ticket-panel-head'><span>{item.get('module', '-')}</span>"
+                        f"<span class='pill-ok'>{item.get('status', 'ok')}</span></div>"
+                        f"<div class='ticket-panel-meta'>{item.get('ts', '-')} | Aktion: {item.get('action', '-')}</div>"
+                        f"<div class='ticket-panel-meta'>Server: {item.get('server_label', '-')} | Actor: {item.get('actor_id', '-')}</div>"
+                        f"<div class='ticket-panel-meta'>Details: {item.get('details', '-') or '-'}</div></div>",
+                        unsafe_allow_html=True,
+                    )
+                if st.button("Audit-Logs leeren", type="secondary"):
+                    with open(AUDIT_LOG_FILE, 'w', encoding='utf-8') as f:
+                        json.dump([], f, indent=2, ensure_ascii=False)
+                    st.success("Audit-Logs wurden geleert.")
+                    st.rerun()
+
         elif page == "Custom Commands":
             render_page_header("Eigene Befehle", "Lege Trigger fest und definiere, wie der Bot antwortet, inkl. optionalem Ziel-Kanal.")
 
@@ -2234,6 +2468,15 @@ else:
                 help="Beispiel: Prefix '/' + Name 'meto' reagiert auf '/meto'.",
             )
             commands_list = settings.get("custom_commands", []) if isinstance(settings.get("custom_commands"), list) else []
+            commands_list = [_normalize_custom_command(cmd) for cmd in commands_list]
+            settings["custom_commands"] = commands_list
+            custom_manager_role_names = st.multiselect(
+                "Nur Mitglieder mit diesen Rollen dürfen eigene Befehle ausführen (optional)",
+                options=list(roles_map.keys()),
+                default=names_for_ids(roles_map, settings.get("custom_commands_manager_roles", [])),
+                key="custom_manager_roles",
+            )
+            custom_manager_roles = [str(roles_map[name]) for name in custom_manager_role_names if name in roles_map]
 
             if "custom_editor_open" not in st.session_state:
                 st.session_state.custom_editor_open = False
@@ -2245,6 +2488,7 @@ else:
                 list_col, action_col = st.columns([8, 2])
                 with action_col:
                     if st.button("+ Befehl erstellen", key="custom_new"):
+                        _push_undo_snapshot(settings, "custom_commands", commands_list)
                         commands_list.append(
                             {
                                 "name": f"cmd_{len(commands_list) + 1}",
@@ -2257,7 +2501,9 @@ else:
                         settings["custom_commands"] = commands_list
                         settings["custom_commands_prefix"] = custom_prefix
                         settings["commands_enabled"] = custom_enabled
+                        settings["custom_commands_manager_roles"] = custom_manager_roles
                         save_settings(settings)
+                        _append_audit_entry("Eigene Befehle", "Befehl erstellt", f"Befehle: {len(commands_list)}")
                         st.session_state.custom_selected_index = len(commands_list) - 1
                         st.session_state.custom_editor_open = True
                         st.rerun()
@@ -2265,8 +2511,20 @@ else:
                     if st.button("Prefix & Status speichern", key="custom_save_status", use_container_width=True):
                         settings["custom_commands_prefix"] = custom_prefix
                         settings["commands_enabled"] = custom_enabled
+                        settings["custom_commands_manager_roles"] = custom_manager_roles
                         save_settings(settings)
+                        _append_audit_entry("Eigene Befehle", "Status gespeichert", f"Aktiv: {custom_enabled}")
                         st.success("Eigene Befehle gespeichert.")
+                    if st.button("Letzte Änderung rückgängig", key="custom_undo", type="secondary"):
+                        restored = _pop_undo_snapshot(settings, "custom_commands")
+                        if restored is None:
+                            st.warning("Keine rückgängig machbare Änderung vorhanden.")
+                        else:
+                            settings["custom_commands"] = [_normalize_custom_command(c) for c in restored]
+                            save_settings(settings)
+                            _append_audit_entry("Eigene Befehle", "Rückgängig", "Letzte Änderung wiederhergestellt")
+                            st.success("Letzte Änderung wurde rückgängig gemacht.")
+                            st.rerun()
 
                 if delete_marked:
                     filtered = [
@@ -2276,10 +2534,13 @@ else:
                     if len(filtered) == len(commands_list):
                         st.warning("Kein Befehl zum Löschen markiert.")
                     else:
+                        _push_undo_snapshot(settings, "custom_commands", commands_list)
                         settings["custom_commands"] = filtered
                         settings["custom_commands_prefix"] = custom_prefix
                         settings["commands_enabled"] = custom_enabled
+                        settings["custom_commands_manager_roles"] = custom_manager_roles
                         save_settings(settings)
+                        _append_audit_entry("Eigene Befehle", "Befehle gelöscht", f"Verbleibend: {len(filtered)}")
                         st.success("Markierte Befehle wurden gelöscht.")
                         st.rerun()
 
@@ -2333,7 +2594,16 @@ else:
                     "custom_target",
                 )
                 new_embed = st.checkbox("Als Embed senden", value=bool(cmd.get("send_as_embed", True)), key="custom_embed")
+                allowed_role_names = st.multiselect(
+                    "Nur diese Rollen dürfen diesen Befehl ausführen (optional)",
+                    options=list(roles_map.keys()),
+                    default=names_for_ids(roles_map, cmd.get("allowed_roles", [])),
+                    key="custom_allowed_roles",
+                )
+                allowed_role_ids = [str(roles_map[name]) for name in allowed_role_names if name in roles_map]
                 st.caption(f"Trigger-Vorschau: {custom_prefix}{new_name.strip()}")
+                st.caption("Antwort-Vorschau")
+                st.code(_preview_text(new_response, "#ziel-kanal"), language="text")
 
                 if back_btn or discard_btn:
                     st.session_state.custom_editor_open = False
@@ -2351,15 +2621,18 @@ else:
                     elif not new_response.strip():
                         st.error("Antwort darf nicht leer sein.")
                     else:
+                        _push_undo_snapshot(settings, "custom_commands", commands_list)
                         commands_list[selected_idx]["name"] = candidate
                         commands_list[selected_idx]["response"] = new_response
                         commands_list[selected_idx]["send_as_embed"] = bool(new_embed)
                         commands_list[selected_idx]["target_channel_id"] = new_target_channel_id
-                        commands_list[selected_idx]["allowed_roles"] = commands_list[selected_idx].get("allowed_roles", [])
+                        commands_list[selected_idx]["allowed_roles"] = allowed_role_ids
                         settings["custom_commands"] = commands_list
                         settings["custom_commands_prefix"] = custom_prefix
                         settings["commands_enabled"] = custom_enabled
+                        settings["custom_commands_manager_roles"] = custom_manager_roles
                         save_settings(settings)
+                        _append_audit_entry("Eigene Befehle", "Befehl gespeichert", f"{custom_prefix}{candidate}")
                         st.success("Eigener Befehl gespeichert.")
                         st.session_state.custom_editor_open = False
                         st.rerun()

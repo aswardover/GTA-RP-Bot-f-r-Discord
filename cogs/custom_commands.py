@@ -35,7 +35,7 @@ class CustomCommands(commands.Cog):
             if not name:
                 continue
             response = str(cmd_def.get("response", ""))
-            allowed_roles = cmd_def.get("allowed_roles", []) if isinstance(cmd_def.get("allowed_roles"), list) else []
+            allowed_roles = [str(r) for r in (cmd_def.get("allowed_roles", []) if isinstance(cmd_def.get("allowed_roles"), list) else []) if str(r).strip()]
             send_as_embed = bool(cmd_def.get("send_as_embed", True))
             target_channel_id = str(cmd_def.get("target_channel_id", "") or "").strip()
             cmd_prefix = str(cmd_def.get("prefix", default_prefix) or default_prefix).strip() or default_prefix
@@ -60,13 +60,19 @@ class CustomCommands(commands.Cog):
         cmd_def = self.text_commands.get(content.lower())
         if not cmd_def:
             return
-        allowed_roles = cmd_def.get("allowed_roles", [])
+        feature_roles = [str(r) for r in (settings.get("custom_commands_manager_roles", []) if isinstance(settings.get("custom_commands_manager_roles"), list) else []) if str(r).strip()]
+        if feature_roles and not message.author.guild_permissions.administrator:
+            user_role_ids = [str(r.id) for r in message.author.roles]
+            if not any(rid in user_role_ids for rid in feature_roles):
+                return
+
+        allowed_roles = [str(r) for r in (cmd_def.get("allowed_roles", []) if isinstance(cmd_def.get("allowed_roles"), list) else []) if str(r).strip()]
         response = cmd_def.get("response", "")
         send_as_embed = bool(cmd_def.get("send_as_embed", True))
         target_channel_id = str(cmd_def.get("target_channel_id", "") or "").strip()
         if allowed_roles:
             if not message.author.guild_permissions.administrator:
-                user_role_ids = [r.id for r in message.author.roles]
+                user_role_ids = [str(r.id) for r in message.author.roles]
                 if not any(rid in user_role_ids for rid in allowed_roles):
                     await message.channel.send(f"{message.author.mention} \u274c Keine Berechtigung.")
                     return

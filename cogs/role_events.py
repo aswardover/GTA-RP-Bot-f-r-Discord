@@ -13,13 +13,12 @@ class RoleEvents(commands.Cog):
         if before.roles != after.roles:
             settings = self.bot.get_settings()
             log_channel_id = settings.get("log_channel")
+            added_roles = [role for role in after.roles if role not in before.roles]
+            removed_roles = [role for role in before.roles if role not in after.roles]
             
             if log_channel_id:
                 log_channel = self.bot.get_channel(int(log_channel_id))
                 if log_channel:
-                    added_roles = [role for role in after.roles if role not in before.roles]
-                    removed_roles = [role for role in before.roles if role not in after.roles]
-
                     embed = discord.Embed(
                         title="Rollenänderung",
                         description=f"Benutzer: {after.mention} ({after.id})",
@@ -35,8 +34,22 @@ class RoleEvents(commands.Cog):
                     await log_channel.send(embed=embed)
 
             # Benutzerdefinierte Wenn-Funktionen
+            if not settings.get("custom_rules_enabled", False):
+                return
+
+            scope_roles = [str(r) for r in (settings.get("if_rules_scope_roles", []) if isinstance(settings.get("if_rules_scope_roles"), list) else []) if str(r).strip()]
+            if scope_roles:
+                member_role_ids = [str(role.id) for role in after.roles]
+                if not any(rid in member_role_ids for rid in scope_roles):
+                    return
+
             rules = settings.get("custom_rules", [])
             for rule in rules:
+                allowed_roles = [str(r) for r in (rule.get("allowed_roles", []) if isinstance(rule.get("allowed_roles"), list) else []) if str(r).strip()]
+                if allowed_roles:
+                    member_role_ids = [str(role.id) for role in after.roles]
+                    if not any(rid in member_role_ids for rid in allowed_roles):
+                        continue
                 if rule.get("event") == "role_remove":
                     removed_role_ids = [str(role.id) for role in removed_roles]
                     if rule.get("role") in removed_role_ids:
