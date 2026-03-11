@@ -58,8 +58,8 @@ st.markdown("""
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #10192d 0%, #0e1628 100%);
         border-right: 1px solid rgba(255,255,255,0.08);
-        min-width: 18rem !important;
-        max-width: 18rem !important;
+        min-width: 17rem !important;
+        max-width: 17rem !important;
     }
     [data-testid="stSidebar"][aria-expanded="false"] {
         margin-left: 0 !important;
@@ -69,16 +69,53 @@ st.markdown("""
         margin-left: 0 !important;
     }
     [data-testid="stSidebar"] .stRadio > div {
-        gap: 0.25rem;
+        gap: 0;
     }
     [data-testid="stSidebar"] .stRadio label {
-        border: 1px solid rgba(255,255,255,0.08);
-        background: rgba(255,255,255,0.03);
-        border-radius: 10px;
-        padding: 0.35rem 0.6rem;
+        border: 0 !important;
+        background: transparent !important;
+        border-radius: 0;
+        padding: 0.46rem 0.2rem;
+        margin: 0;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        transition: background-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+    }
+    [data-testid="stSidebar"] .stRadio label p {
+        font-size: 1.03rem;
+        font-weight: 620;
+        letter-spacing: 0.01em;
     }
     [data-testid="stSidebar"] .stRadio label:hover {
-        border-color: rgba(95,124,255,0.45);
+        background: rgba(255,255,255,0.03) !important;
+        transform: translateX(2px);
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+    }
+    [data-testid="stSidebar"] .stRadio label:has(input:checked) {
+        background: rgba(95,124,255,0.12) !important;
+        border-left: 3px solid rgba(95,124,255,0.95);
+        padding-left: calc(0.2rem - 3px);
+        box-shadow: inset 0 0 0 1px rgba(122,77,255,0.28), 0 0 14px rgba(95,124,255,0.20);
+    }
+    [data-testid="stSidebar"] .stRadio label:has(input:checked) p {
+        color: #f3f6ff !important;
+        text-shadow: 0 0 10px rgba(122,77,255,0.24);
+    }
+    [data-testid="stSidebar"] [role="radiogroup"] {
+        border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    [data-testid="stSidebar"] .stButton > button {
+        width: 100%;
+        border-radius: 9px;
+        background: linear-gradient(90deg, rgba(95,124,255,0.95), rgba(122,77,255,0.9));
+        border: 1px solid rgba(255,255,255,0.14);
+        font-weight: 650;
+        padding: 0.45rem 0.8rem;
+    }
+    [data-testid="stSidebar"] .stSelectbox label {
+        font-size: 0.86rem !important;
+        color: var(--as-muted) !important;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
     }
     [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
         color: var(--as-text);
@@ -164,6 +201,48 @@ st.markdown("""
         color: var(--as-muted);
         margin-top: 0;
         margin-bottom: 1rem;
+    }
+    .soft-divider {
+        border: 0;
+        border-top: 1px solid rgba(255,255,255,0.10);
+        margin: 0.7rem 0 1rem 0;
+    }
+    .ticket-panel-card {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 12px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
+    }
+    .ticket-panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+    .ticket-panel-meta {
+        color: var(--as-muted);
+        font-size: 0.9rem;
+        margin-bottom: 0.4rem;
+    }
+    .ticket-command-row {
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        padding: 0.42rem 0;
+        color: #e6ecff;
+    }
+    .ticket-command-row:last-child {
+        border-bottom: 0;
+    }
+    [data-testid="stExpander"] {
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 10px;
+        background: rgba(255,255,255,0.02);
+        margin-bottom: 0.55rem;
+    }
+    [data-testid="stExpander"] details summary p {
+        font-weight: 700;
+        font-size: 0.95rem;
     }
     /* Improve readability across the dashboard with high-contrast text. */
     .stMarkdown,
@@ -554,16 +633,41 @@ else:
     else:
         # ADMIN DASHBOARD
         render_brand_header()
+        settings = load_settings()
+        discord_data = load_discord_data()
         st.sidebar.markdown("### ASWARD Modules")
         st.sidebar.caption("Steuere alle Bot-Systeme zentral")
+        guild_choices = []
+        raw_guilds = discord_data.get("guilds", []) if isinstance(discord_data, dict) else []
+        if isinstance(raw_guilds, dict):
+            guild_choices = [str(name) for name in raw_guilds.keys() if str(name).strip()]
+        elif isinstance(raw_guilds, list):
+            for item in raw_guilds:
+                if isinstance(item, dict):
+                    name = item.get("name") or item.get("guild_name") or item.get("label")
+                    if name:
+                        guild_choices.append(str(name))
+                elif isinstance(item, str) and item.strip():
+                    guild_choices.append(item.strip())
+        if not guild_choices:
+            guild_choices = [settings.get("dashboard_server_name", "ASWARD Server")]
+
+        if "sidebar_server_choice" not in st.session_state or st.session_state.sidebar_server_choice not in guild_choices:
+            st.session_state.sidebar_server_choice = guild_choices[0]
+        st.sidebar.selectbox(
+            "Server auswaehlen",
+            guild_choices,
+            index=guild_choices.index(st.session_state.sidebar_server_choice),
+            key="sidebar_server_choice",
+        )
+        st.sidebar.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
+
         if st.sidebar.button("Discord-Daten synchronisieren"):
             ok, msg = request_discord_data_sync()
             if ok:
                 st.sidebar.success(msg)
             else:
                 st.sidebar.error(msg)
-        settings = load_settings()
-        discord_data = load_discord_data()
         channels_map = normalize_named_mapping(discord_data.get("channels", {}))
         channels_map = add_ids_from_settings(
             channels_map,
@@ -612,23 +716,47 @@ else:
             "Embed Hub": "Embed Hub",
             "Settings": "Einstellungen",
         }
+        nav_icon_map = {
+            "Overview": "◉",
+            "Tickets": "✦",
+            "Stempeluhr": "◷",
+            "Server Tools": "🛠",
+            "Auto Mod": "🛡",
+            "If Rules": "↯",
+            "Giveaway": "🎁",
+            "Announcements": "📣",
+            "Reaction Roles": "◎",
+            "Polls": "🗳",
+            "Moderation": "⚖",
+            "Logging": "⎘",
+            "Embed Hub": "◈",
+            "Settings": "⚙",
+        }
 
         nav_options = list(page_map.keys())
+        nav_display_to_key = {f"{nav_icon_map.get(k, '•')}  {k}": k for k in nav_options}
+        nav_display_options = list(nav_display_to_key.keys())
+
         if "active_page" not in st.session_state or st.session_state.active_page not in nav_options:
             st.session_state.active_page = nav_options[0]
 
+        current_display = next(
+            (disp for disp, key in nav_display_to_key.items() if key == st.session_state.active_page),
+            nav_display_options[0],
+        )
         sidebar_choice = st.sidebar.radio(
             "Schnellnavigation",
-            nav_options,
-            index=nav_options.index(st.session_state.active_page),
+            nav_display_options,
+            index=nav_display_options.index(current_display),
             key="sidebar_nav_choice",
         )
-        if sidebar_choice != st.session_state.active_page:
-            st.session_state.active_page = sidebar_choice
+        selected_key = nav_display_to_key.get(sidebar_choice, st.session_state.active_page)
+        if selected_key != st.session_state.active_page:
+            st.session_state.active_page = selected_key
 
         page = page_map[st.session_state.active_page]
-        st.sidebar.markdown("<span class='pill-ok'>System Online</span>", unsafe_allow_html=True)
-        
+        st.sidebar.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
+
         if st.sidebar.button("Abmelden"):
             st.session_state.logged_in = False
             st.rerun()
@@ -647,99 +775,214 @@ else:
             st.markdown('<div class="status-card">Bot erfolgreich gestartet. Alle Systeme laufen nominal.</div>', unsafe_allow_html=True)
 
         elif page == "Tickets":
-            render_page_header("Ticket System", "Ticket-Konfiguration mit Optionen, Kategorien, Manager-Rollen und Transcript.")
-            tickets_enabled = st.checkbox("Tickets aktivieren", value=settings.get("tickets_enabled", False))
+            render_page_header("Ticketsystem", "Uebersicht und pro Panel ein strukturierter Editor.")
 
-            st.subheader("Allgemein")
-            panel_channel_id = select_channel_id(
-                "Panel-Kanal fuer das Ticket-Menue",
-                channels_map,
-                settings.get("tickets_panel_channel_id", settings.get("ticket_channel_id", "")),
-                "tickets_panel",
-                allow_manual_input=False,
-            )
-            panel_mode = st.radio(
-                "Panel-Modus",
-                ["buttons", "dropdown"],
-                index=0 if settings.get("tickets_panel_mode", "buttons") == "buttons" else 1,
-                horizontal=True,
-            )
-            panel_title = st.text_input("Panel Titel", value=settings.get("tickets_panel_title", "🎫 Ticket-System"))
-            panel_description = st.text_area(
-                "Panel Beschreibung",
-                value=settings.get("tickets_panel_description", "Waehle eine Option, um ein Ticket zu erstellen."),
-            )
+            if "tickets_editor_open" not in st.session_state:
+                st.session_state.tickets_editor_open = False
 
-            st.subheader("Ticket Manager-Rollen")
-            manager_defaults = names_for_ids(roles_map, settings.get("tickets_manager_roles", []))
-            manager_role_names = st.multiselect("Rollen mit Zugriff auf Claim/Close", options=list(roles_map.keys()), default=manager_defaults)
-
-            st.subheader("Kategorien fuer Ticket-Status")
-            open_category_id = select_category_id("Kategorie fuer neue Tickets", categories_map, settings.get("tickets_open_category_id"), "tickets_open_category", allow_manual_input=False)
-            claimed_category_id = select_category_id("Kategorie fuer uebernommene Tickets", categories_map, settings.get("tickets_claimed_category_id"), "tickets_claimed_category", allow_manual_input=False)
-            closed_category_id = select_category_id("Kategorie fuer geschlossene Tickets", categories_map, settings.get("tickets_closed_category_id"), "tickets_closed_category", allow_manual_input=False)
-            delete_on_close = st.checkbox("Ticket-Kanal nach Schliessen loeschen", value=settings.get("tickets_delete_on_close", True))
-
-            st.subheader("Ticket-Transkripte")
-            transcript_channel_id = select_channel_id("Kanal fuer Ticket-Transkripte", channels_map, settings.get("tickets_transcript_channel_id"), "tickets_transcript_channel", allow_manual_input=False)
-            transcript_dm_enabled = st.checkbox(
-                "Transcript-Link/Datei privat an Ticket-Ersteller senden",
-                value=settings.get("tickets_transcript_dm_enabled", False),
-            )
-
-            st.subheader("Option-Editor")
-            existing_options = settings.get("tickets_categories", []) if isinstance(settings.get("tickets_categories", []), list) else []
-            option_count_default = len(existing_options) if existing_options else 1
-            option_count = int(st.number_input("Anzahl Ticket-Optionen", min_value=1, max_value=5, value=max(1, min(5, option_count_default))))
-
-            built_options = []
-            for idx in range(option_count):
-                base = existing_options[idx] if idx < len(existing_options) and isinstance(existing_options[idx], dict) else {}
-                st.markdown(f"**Option {idx + 1}**")
-                opt_emoji = st.text_input("Emoji", value=str(base.get("emoji", "📩")), key=f"ticket_option_emoji_{idx}")
-                opt_name = st.text_input("Etikett", value=str(base.get("name", f"Ticket {idx + 1}")), key=f"ticket_option_name_{idx}")
-                opt_desc = st.text_input("Beschreibung", value=str(base.get("description", "Unser Team kann dir helfen!")), key=f"ticket_option_desc_{idx}")
-                opt_cat_id = select_category_id("Kategorie fuer diese Ticket-Option", categories_map, base.get("category_channel_id"), f"ticket_option_category_{idx}", allow_manual_input=False)
-                opt_auto_role = select_role_id("Auto-Rolle (optional)", roles_map, base.get("auto_role_id"), f"ticket_option_auto_role_{idx}", allow_manual_input=False)
-                built_options.append(
+            ticket_panels = settings.get("ticket_panels") if isinstance(settings.get("ticket_panels"), list) else []
+            if not ticket_panels:
+                ticket_panels = [
                     {
-                        "emoji": opt_emoji,
-                        "name": opt_name,
-                        "description": opt_desc,
-                        "category_channel_id": int(opt_cat_id) if (opt_cat_id and str(opt_cat_id).isdigit()) else opt_cat_id,
-                        "auto_role_id": int(opt_auto_role) if (opt_auto_role and str(opt_auto_role).isdigit()) else opt_auto_role,
+                        "name": settings.get("tickets_panel_name", "Neues Ticket-Panel"),
+                        "enabled": settings.get("tickets_enabled", False),
+                        "panel_channel_id": settings.get("tickets_panel_channel_id"),
+                        "manager_roles": settings.get("tickets_manager_roles", []),
+                        "panel_title": settings.get("tickets_panel_title", "🎫 Ticket-System"),
+                        "panel_description": settings.get("tickets_panel_description", "Waehle eine Option, um ein Ticket zu erstellen."),
+                        "panel_mode": settings.get("tickets_panel_mode", "buttons"),
+                        "options": settings.get("tickets_categories", []),
+                        "open_category_id": settings.get("tickets_open_category_id"),
+                        "claimed_category_id": settings.get("tickets_claimed_category_id"),
+                        "closed_category_id": settings.get("tickets_closed_category_id"),
+                        "transcript_channel_id": settings.get("tickets_transcript_channel_id"),
+                        "transcript_dm_enabled": settings.get("tickets_transcript_dm_enabled", False),
+                        "delete_on_close": settings.get("tickets_delete_on_close", True),
+                        "opened_message": settings.get("tickets_opened_message", "Dein Ticket wurde erstellt. Bitte gib alle zusaetzlichen Informationen an."),
                     }
-                )
+                ]
 
-            if st.button("Ticket Einstellungen speichern"):
-                settings["tickets_enabled"] = tickets_enabled
-                settings["ticket_channel_id"] = panel_channel_id
-                settings["tickets_panel_channel_id"] = panel_channel_id
-                settings["tickets_panel_mode"] = panel_mode
-                settings["tickets_panel_title"] = panel_title
-                settings["tickets_panel_description"] = panel_description
-                settings["tickets_categories"] = built_options
-                resolved_manager_roles = [str(roles_map[name]) for name in manager_role_names]
-                settings["tickets_manager_roles"] = resolved_manager_roles
-                settings["tickets_open_category_id"] = int(open_category_id) if (open_category_id and str(open_category_id).isdigit()) else open_category_id
-                settings["tickets_claimed_category_id"] = int(claimed_category_id) if (claimed_category_id and str(claimed_category_id).isdigit()) else claimed_category_id
-                settings["tickets_closed_category_id"] = int(closed_category_id) if (closed_category_id and str(closed_category_id).isdigit()) else closed_category_id
-                settings["tickets_transcript_channel_id"] = int(transcript_channel_id) if (transcript_channel_id and str(transcript_channel_id).isdigit()) else transcript_channel_id
-                settings["tickets_transcript_dm_enabled"] = transcript_dm_enabled
-                settings["tickets_delete_on_close"] = delete_on_close
-                save_settings(settings)
-                st.success("Ticket Einstellungen gespeichert!")
+            if not st.session_state.tickets_editor_open:
+                top_col, toggle_col = st.columns([10, 2])
+                with top_col:
+                    st.markdown("### Deine Ticket-Panels")
+                with toggle_col:
+                    active_toggle = st.checkbox("Aktiv", value=bool(ticket_panels and ticket_panels[0].get("enabled", False)), key="tickets_active_toggle")
+                    ticket_panels[0]["enabled"] = active_toggle
 
-            if st.button("Ticket Panel veroeffentlichen"):
-                settings["tickets_enabled"] = tickets_enabled
-                settings["tickets_panel_channel_id"] = panel_channel_id or settings.get("tickets_panel_channel_id")
-                settings["tickets_panel_mode"] = panel_mode
-                settings["tickets_panel_title"] = panel_title
-                settings["tickets_panel_description"] = panel_description
-                settings["tickets_categories"] = built_options
-                settings["tickets_publish_trigger"] = True
+                stat_left, stat_right = st.columns([7, 3])
+                with stat_left:
+                    st.caption("Die Befehle koennen nur von Ticketmanagern in einem Ticketkanal ausgefuehrt werden.")
+                with stat_right:
+                    st.markdown("<div style='text-align:right;'>1 / 10</div>", unsafe_allow_html=True)
+
+                list_col, action_col = st.columns([8, 2])
+                with action_col:
+                    if st.button("+ Ein Panel erstellen"):
+                        st.session_state.tickets_editor_open = True
+                        st.rerun()
+
+                with list_col:
+                    panel = ticket_panels[0]
+                    channel_id_preview = panel.get("panel_channel_id") or "-"
+                    status_text = "Veroeffentlicht" if panel.get("enabled", False) else "Entwurf"
+                    st.markdown(
+                        f"<div class='ticket-panel-card'><div class='ticket-panel-head'><span>{panel.get('name', 'Neues Ticket-Panel')}</span>"
+                        f"<span class='pill-ok'>{status_text}</span></div><div class='ticket-panel-meta'>Kanal-ID: {channel_id_preview}</div>"
+                        f"<div class='ticket-panel-meta'>Modus: {panel.get('panel_mode', 'buttons')}</div></div>",
+                        unsafe_allow_html=True,
+                    )
+
+                st.subheader("Befehle")
+                st.markdown("<div class='ticket-command-row'>/ticket-claim - Beanspruche ein Ticket</div>", unsafe_allow_html=True)
+                st.markdown("<div class='ticket-command-row'>/ticket-close - Schliesse ein Ticket</div>", unsafe_allow_html=True)
+                st.markdown("<div class='ticket-command-row'>/ticket-delete - optional ueber Kanal-Loeschung bei Close</div>", unsafe_allow_html=True)
+
+                settings["ticket_panels"] = ticket_panels
+                settings["tickets_enabled"] = ticket_panels[0].get("enabled", False)
                 save_settings(settings)
-                st.success("Ticket Panel wird veroeffentlicht.")
+
+            else:
+                panel = ticket_panels[0]
+
+                back_col, title_col, action_col = st.columns([1, 7, 4])
+                with back_col:
+                    if st.button("<"):
+                        st.session_state.tickets_editor_open = False
+                        st.rerun()
+                with title_col:
+                    panel_name = st.text_input("Panelname", value=panel.get("name", "Neues Ticket-Panel"))
+                with action_col:
+                    discard_btn = st.button("Verwerfen")
+                    save_btn = st.button("Speichern")
+                    publish_btn = st.button("Veroeffentlichen")
+
+                with st.expander("Allgemein", expanded=True):
+                    panel_channel_id = select_channel_id(
+                        "Kanal veroeffentlichen",
+                        channels_map,
+                        panel.get("panel_channel_id"),
+                        "tickets_panel_editor_channel",
+                        allow_manual_input=False,
+                    )
+                    manager_defaults = names_for_ids(roles_map, panel.get("manager_roles", []))
+                    manager_role_names = st.multiselect(
+                        "Ticket Manager-Rollen",
+                        options=list(roles_map.keys()),
+                        default=manager_defaults,
+                    )
+
+                with st.expander("Panel", expanded=True):
+                    panel_title = st.text_input("Titel des Ticket-Panels", value=panel.get("panel_title", "🎫 Ticket-System"))
+                    panel_description = st.text_area("Beschreibung", value=panel.get("panel_description", "Waehle eine Option, um ein Ticket zu erstellen."))
+
+                with st.expander("Ticketarten", expanded=True):
+                    panel_mode = st.radio(
+                        "Ansicht",
+                        ["buttons", "dropdown"],
+                        index=0 if panel.get("panel_mode", "buttons") == "buttons" else 1,
+                        horizontal=True,
+                    )
+                    existing_options = panel.get("options", []) if isinstance(panel.get("options", []), list) else []
+                    option_count_default = len(existing_options) if existing_options else 1
+                    option_count = int(st.number_input("Anzahl Buttons/Optionen", min_value=1, max_value=5, value=max(1, min(5, option_count_default))))
+                    built_options = []
+                    for idx in range(option_count):
+                        base = existing_options[idx] if idx < len(existing_options) and isinstance(existing_options[idx], dict) else {}
+                        st.markdown(f"**Option {idx + 1}**")
+                        opt_emoji = st.text_input("Emoji", value=str(base.get("emoji", "📩")), key=f"ticket_editor_emoji_{idx}")
+                        opt_name = st.text_input("Buttonname", value=str(base.get("name", f"Ticket oeffnen {idx + 1}")), key=f"ticket_editor_name_{idx}")
+                        opt_desc = st.text_input("Beschreibung", value=str(base.get("description", "Unser Team kann dir helfen!")), key=f"ticket_editor_desc_{idx}")
+                        opt_cat_open = select_category_id("Kategorie fuer erstellte Tickets", categories_map, base.get("category_channel_id"), f"ticket_editor_open_cat_{idx}", allow_manual_input=False)
+                        opt_cat_claimed = select_category_id("Kategorie fuer beanspruchte Tickets", categories_map, panel.get("claimed_category_id"), f"ticket_editor_claim_cat_{idx}", allow_manual_input=False)
+                        opt_cat_closed = select_category_id("Kategorie fuer geschlossene Tickets", categories_map, panel.get("closed_category_id"), f"ticket_editor_close_cat_{idx}", allow_manual_input=False)
+                        built_options.append(
+                            {
+                                "emoji": opt_emoji,
+                                "name": opt_name,
+                                "description": opt_desc,
+                                "category_channel_id": int(opt_cat_open) if (opt_cat_open and str(opt_cat_open).isdigit()) else opt_cat_open,
+                                "auto_role_id": None,
+                            }
+                        )
+
+                with st.expander("Nachricht zur Ticketeroeffnung", expanded=True):
+                    opened_message = st.text_area(
+                        "Nachrichtstext",
+                        value=panel.get("opened_message", "Dein Ticket wurde erstellt. Bitte gib alle zusaetzlichen Informationen an."),
+                    )
+
+                with st.expander("Ticket-Transkripte", expanded=True):
+                    transcript_channel_id = select_channel_id(
+                        "Transkript-Kanal",
+                        channels_map,
+                        panel.get("transcript_channel_id"),
+                        "tickets_editor_transcript_channel",
+                        allow_manual_input=False,
+                    )
+                    transcript_dm_enabled = st.checkbox(
+                        "Sende den Link zum Transcript privat an das Mitglied",
+                        value=panel.get("transcript_dm_enabled", False),
+                    )
+
+                # Values from visual selectors
+                open_category_id = int(opt_cat_open) if (opt_cat_open and str(opt_cat_open).isdigit()) else opt_cat_open
+                claimed_category_id = int(opt_cat_claimed) if (opt_cat_claimed and str(opt_cat_claimed).isdigit()) else opt_cat_claimed
+                closed_category_id = int(opt_cat_closed) if (opt_cat_closed and str(opt_cat_closed).isdigit()) else opt_cat_closed
+                manager_role_ids = [str(roles_map[name]) for name in manager_role_names]
+
+                if discard_btn:
+                    st.session_state.tickets_editor_open = False
+                    st.rerun()
+
+                if save_btn or publish_btn:
+                    panel.update(
+                        {
+                            "name": panel_name,
+                            "enabled": bool(panel.get("enabled", False)),
+                            "panel_channel_id": panel_channel_id,
+                            "manager_roles": manager_role_ids,
+                            "panel_title": panel_title,
+                            "panel_description": panel_description,
+                            "panel_mode": panel_mode,
+                            "options": built_options,
+                            "open_category_id": open_category_id,
+                            "claimed_category_id": claimed_category_id,
+                            "closed_category_id": closed_category_id,
+                            "transcript_channel_id": transcript_channel_id,
+                            "transcript_dm_enabled": transcript_dm_enabled,
+                            "delete_on_close": True,
+                            "opened_message": opened_message,
+                        }
+                    )
+                    ticket_panels[0] = panel
+                    settings["ticket_panels"] = ticket_panels
+
+                    # Keep backend compatibility for current ticket cog.
+                    settings["tickets_enabled"] = panel.get("enabled", False)
+                    settings["ticket_channel_id"] = panel_channel_id
+                    settings["tickets_panel_channel_id"] = panel_channel_id
+                    settings["tickets_panel_mode"] = panel_mode
+                    settings["tickets_panel_name"] = panel_name
+                    settings["tickets_panel_title"] = panel_title
+                    settings["tickets_panel_description"] = panel_description
+                    settings["tickets_categories"] = built_options
+                    settings["tickets_manager_roles"] = manager_role_ids
+                    settings["tickets_open_category_id"] = open_category_id
+                    settings["tickets_claimed_category_id"] = claimed_category_id
+                    settings["tickets_closed_category_id"] = closed_category_id
+                    settings["tickets_transcript_channel_id"] = transcript_channel_id
+                    settings["tickets_transcript_dm_enabled"] = transcript_dm_enabled
+                    settings["tickets_delete_on_close"] = True
+                    settings["tickets_opened_message"] = opened_message
+
+                    if publish_btn:
+                        settings["tickets_enabled"] = True
+                        settings["tickets_publish_trigger"] = True
+                        panel["enabled"] = True
+
+                    save_settings(settings)
+                    st.success("Ticket-Panel gespeichert." if save_btn else "Ticket-Panel gespeichert und wird veroeffentlicht.")
 
         elif page == "Stempeluhr":
             render_page_header("Stempeluhr System", "Berechtigungen und Panel-Channel für die Zeit-Erfassung.")
