@@ -496,22 +496,23 @@ def _render_member_copy_list(members):
                 color: #9fb0d7;
             }}
             .copy-toast {{
-                margin-top: 8px;
-                padding: 6px 8px;
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                z-index: 99999;
+                background: #22c55e;
+                color: #0d1117;
+                padding: 10px 14px;
                 border-radius: 8px;
-                background: rgba(34,197,94,0.15);
-                color: #86efac;
-                border: 1px solid rgba(34,197,94,0.3);
+                font-size: 0.9rem;
+                font-weight: 600;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
                 display: none;
-                font-size: 0.82rem;
-                text-align: center;
-                animation: fadeInOut 2s ease-in-out;
+                animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
             }}
-            @keyframes fadeInOut {{
-                0% {{ opacity: 0; }}
-                10% {{ opacity: 1; }}
-                90% {{ opacity: 1; }}
-                100% {{ opacity: 0; }}
+            @keyframes slideIn {{
+                from {{ transform: translateY(-20px); opacity: 0; }}
+                to {{ transform: translateY(0); opacity: 1; }}
             }}
         </style>
         <script>
@@ -526,31 +527,44 @@ def _render_member_copy_list(members):
                         const userId = btn.getAttribute('data-user-id') || '';
                         if (!userId) return;
                         
-                        // Fallback copy method
+                        let success = false;
                         try {{
-                            if (navigator.clipboard) {{
+                            if (navigator.clipboard && navigator.clipboard.writeText) {{
                                 await navigator.clipboard.writeText(userId);
+                                success = true;
                             }} else {{
+                                throw new Error("Clipboard API unavailable");
+                            }}
+                        }} catch (e) {{
+                            try {{
                                 const textArea = document.createElement("textarea");
                                 textArea.value = userId;
+                                textArea.style.position = "fixed";
+                                textArea.style.opacity = "0";
+                                textArea.style.left = "-9999px";
                                 document.body.appendChild(textArea);
+                                textArea.focus();
                                 textArea.select();
-                                document.execCommand("copy");
+                                success = document.execCommand("copy");
                                 document.body.removeChild(textArea);
+                            }} catch (err) {{
+                                console.error(err);
+                                success = false;
                             }}
-                            toast.textContent = 'Nutzer ID kopiert';
-                            toast.style.display = 'block';
-                            toast.style.background = 'rgba(34,197,94,0.15)';
-                            toast.style.color = '#86efac';
-                            setTimeout(() => {{ toast.style.display = 'none'; }}, 2000);
-                        }} catch (e) {{
-                            console.error(e);
-                            toast.textContent = 'Fehler beim Kopieren';
-                            toast.style.display = 'block';
-                            toast.style.background = 'rgba(239, 68, 68, 0.15)';
-                            toast.style.color = '#fca5a5';
-                            setTimeout(() => {{ toast.style.display = 'none'; }}, 2000);
                         }}
+
+                        if (success) {{
+                            toast.textContent = 'ID kopiert: ' + userId;
+                            toast.style.background = '#22c55e';
+                            toast.style.color = '#0d1117';
+                        }} else {{
+                            toast.textContent = 'Fehler beim Kopieren';
+                            toast.style.background = '#ef4444';
+                            toast.style.color = '#fff';
+                        }}
+                        
+                        toast.style.display = 'block';
+                        setTimeout(() => {{ toast.style.display = 'none'; }}, 2500);
                     }});
                 }});
             }})();

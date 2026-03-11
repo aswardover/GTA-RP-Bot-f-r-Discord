@@ -91,9 +91,10 @@ class StempelView(discord.ui.View):
             data[uid]["eingestempelt"] = None
             data[uid]["last_reminder_sent"] = None
             
+            duration_text = f"{hours} Stunden und {minutes} Minuten" if hours > 0 else f"{minutes} Minuten"
             embed = discord.Embed(
                 title=f"{project_name} | Stempeluhr",
-                description=f"Du hast dich erfolgreich abgemeldet. Du warst **{hours} Minuten** im Dienst.",
+                description=f"Du hast dich erfolgreich abgemeldet. Du warst **{duration_text}** im Dienst.",
                 color=0xef4444
             )
             embed.set_footer(text=footer_text, icon_url=user_avatar)

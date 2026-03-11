@@ -140,6 +140,10 @@ class DataExporter(commands.Cog):
             "bot_user": str(getattr(self.bot.user, "name", "")) if self.bot.user else "",
             "bot_id": str(getattr(self.bot.user, "id", "")) if self.bot.user else "",
         }
+        # Auslagerung des Schreibvorgangs in einen Thread
+        await self.bot.loop.run_in_executor(None, self._write_data_sync, data)
+
+    def _write_data_sync(self, data):
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
 
