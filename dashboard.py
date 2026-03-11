@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-import streamlit.components.v1 as components
 import json
 import os
 import requests
@@ -184,31 +183,6 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
-
-def mount_oauth_tab_sync_listener():
-    """Sync login state across tabs and bring users back to the original dashboard tab."""
-    components.html(
-        """
-        <script>
-        (function () {
-            const topWindow = window.parent;
-            if (!topWindow || topWindow.__aswardOauthSyncMounted) {
-                return;
-            }
-            topWindow.__aswardOauthSyncMounted = true;
-            topWindow.addEventListener("storage", function (event) {
-                if (event.key === "asward_oauth_login_done") {
-                    const cleanUrl = topWindow.location.origin + topWindow.location.pathname;
-                    topWindow.location.href = cleanUrl;
-                }
-            });
-        })();
-        </script>
-        """,
-        height=0,
-    )
-
-mount_oauth_tab_sync_listener()
 
 def render_brand_header():
     logo_col, txt_col = st.columns([1, 8])
@@ -526,11 +500,13 @@ def login_form():
         return
     
     auth_url = get_discord_auth_url()
-    st.markdown(f'[Mit Discord anmelden]({auth_url})')
+    st.markdown(f'<a href="{auth_url}" target="_self">Mit Discord anmelden</a>', unsafe_allow_html=True)
     
     # Check for code in query params
     query_params = st.query_params
     code = query_params.get("code")
+    if isinstance(code, list):
+        code = code[0] if code else None
     if code:
         token_data = exchange_code_for_token(code)
         if "access_token" in token_data:
@@ -540,32 +516,7 @@ def login_form():
                 st.session_state.user_id = user_info["id"]
                 st.session_state.logged_in = True
                 st.query_params.clear()  # Clear params
-                # Notify other tabs and return focus to the original dashboard tab when possible.
-                components.html(
-                    """
-                    <script>
-                    (function () {
-                        const topWindow = window.parent;
-                        const cleanUrl = topWindow.location.origin + topWindow.location.pathname;
-                        try {
-                            localStorage.setItem("asward_oauth_login_done", String(Date.now()));
-                        } catch (e) {}
-                        try {
-                            if (topWindow.opener && !topWindow.opener.closed) {
-                                topWindow.opener.location.href = cleanUrl;
-                                topWindow.opener.focus();
-                                topWindow.close();
-                                return;
-                            }
-                        } catch (e) {}
-                        topWindow.location.href = cleanUrl;
-                    })();
-                    </script>
-                    """,
-                    height=0,
-                )
-                st.info("Login erfolgreich. Du wirst zum urspruenglichen Dashboard-Tab zurueckgeleitet.")
-                st.stop()
+                st.rerun()
         else:
             st.error("Fehler beim Anmelden. Versuche es erneut.")
 
