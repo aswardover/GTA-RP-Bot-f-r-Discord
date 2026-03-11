@@ -50,22 +50,23 @@ st.markdown("""
     [data-testid="stToolbar"] {
         display: none;
     }
-    [data-testid="collapsedControl"] {
-        display: block;
-        position: fixed;
-        top: 0.55rem;
-        left: 0.55rem;
-        z-index: 1000;
-    }
-    [data-testid="collapsedControl"] button {
-        background: rgba(11, 15, 28, 0.75);
-        border: 1px solid rgba(255,255,255,0.18);
-        border-radius: 10px;
-        color: var(--as-text);
+    /* Keep the left navigation permanently visible and non-collapsible. */
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapseButton"] {
+        display: none !important;
     }
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #10192d 0%, #0e1628 100%);
         border-right: 1px solid rgba(255,255,255,0.08);
+        min-width: 18rem !important;
+        max-width: 18rem !important;
+    }
+    [data-testid="stSidebar"][aria-expanded="false"] {
+        margin-left: 0 !important;
+        transform: none !important;
+    }
+    [data-testid="stSidebar"][aria-expanded="false"] > div {
+        margin-left: 0 !important;
     }
     [data-testid="stSidebar"] .stRadio > div {
         gap: 0.25rem;
