@@ -1279,7 +1279,7 @@ else:
         server_dropdown_options = [add_server_option] + display_labels
 
         if "sidebar_server_choice" not in st.session_state or st.session_state.sidebar_server_choice not in server_dropdown_options:
-            st.session_state.sidebar_server_choice = display_labels[0]
+            st.session_state.sidebar_server_choice = display_labels[0] if display_labels else add_server_option
 
         selected_dropdown_option = st.sidebar.selectbox(
             "Server auswählen",
@@ -1287,7 +1287,9 @@ else:
             key="sidebar_server_choice",
         )
 
-        if selected_dropdown_option == add_server_option:
+        add_server_mode = selected_dropdown_option == add_server_option
+
+        if add_server_mode:
             chosen_server_label = st.session_state.get("active_server_label", display_labels[0])
             selected_server_key = st.session_state.get("active_server_key", display_to_key.get(chosen_server_label, display_to_key[display_labels[0]]))
             selected_server_entry = display_to_entry.get(chosen_server_label, {"label": chosen_server_label, "key": selected_server_key, "guild_id": ""})
@@ -1302,10 +1304,12 @@ else:
                     value=str(raw_settings.get("bot_invite_permissions", "8")),
                     key="new_server_permissions",
                 )
+                if new_server_id.strip() and not new_server_id.strip().isdigit():
+                    st.sidebar.error("Server-ID muss numerisch sein (Discord Guild ID).")
                 disable_guild_select = st.sidebar.checkbox("Server im Invite fixieren", value=False, key="new_server_disable_select")
                 invite_link = get_bot_invite_url(
                     guild_id=new_server_id.strip() if new_server_id.strip() else None,
-                    permissions=invite_permissions,
+                    permissions=invite_permissions if str(invite_permissions).strip().isdigit() else "8",
                     disable_guild_select=disable_guild_select,
                 )
                 st.sidebar.markdown(f"[Bot auf Server einladen]({invite_link})")
@@ -1314,12 +1318,15 @@ else:
                 if st.sidebar.button("Server speichern", key="save_new_server_btn"):
                     if not new_server_name.strip():
                         st.sidebar.error("Bitte gib einen Servernamen an.")
+                    elif new_server_id.strip() and not new_server_id.strip().isdigit():
+                        st.sidebar.error("Server-ID muss numerisch sein (Discord Guild ID).")
                     else:
                         created_key = _register_dashboard_server(new_server_name.strip(), new_server_id.strip())
                         if created_key:
                             st.session_state.active_server_key = created_key
                             st.session_state.active_server_label = new_server_name.strip()
-                            st.session_state.sidebar_server_choice = new_server_name.strip()
+                            st.session_state.force_server_key = created_key
+                            st.session_state.sidebar_server_choice = add_server_option
                             st.sidebar.success("Server angelegt. Du kannst ihn jetzt konfigurieren.")
                             st.rerun()
             else:
@@ -1333,8 +1340,34 @@ else:
         st.session_state.active_server_label = chosen_server_label
         st.session_state.active_server_entry = selected_server_entry
 
+        forced_key = str(st.session_state.get("force_server_key") or "").strip()
+        if forced_key:
+            forced_entry = next((e for e in server_entries if str(e.get("key") or "") == forced_key), None)
+            if forced_entry:
+                chosen_server_label = str(forced_entry.get("label") or chosen_server_label)
+                selected_server_key = forced_key
+                selected_server_entry = forced_entry
+                st.session_state.active_server_key = selected_server_key
+                st.session_state.active_server_label = chosen_server_label
+                st.session_state.active_server_entry = selected_server_entry
+                if chosen_server_label in server_dropdown_options:
+                    st.session_state.sidebar_server_choice = chosen_server_label
+            st.session_state.force_server_key = ""
+
         settings = _effective_settings_for_server(raw_settings, selected_server_key)
         settings["dashboard_server_name"] = chosen_server_label
+
+        if add_server_mode:
+            render_page_header("Server Hinzufügen", "Lege ein neues Server-Profil an und verbinde den Bot sauber mit deinem Discord-Server.")
+            st.markdown("### Schritt-für-Schritt")
+            st.markdown("1. Trage links bei **Servername** einen klaren Namen ein (z. B. Communityname).")
+            st.markdown("2. Optional: Füge die Discord **Server-ID** ein, damit Zuordnung und Live-Daten exakt sind.")
+            st.markdown("3. Prüfe die **Invite-Berechtigungen** (empfohlen: `8` für Admin-Test, später fein granular einschränken).")
+            st.markdown("4. Klicke auf **Bot auf Server einladen** und bestätige im Discord OAuth-Fenster den Zielserver.")
+            st.markdown("5. Klicke danach auf **Server speichern**.")
+            st.markdown("6. Wähle den neuen Server im Dropdown aus und drücke **Discord-Daten synchronisieren**.")
+            st.markdown("7. Öffne anschließend die Module und speichere die ersten server-spezifischen Einstellungen.")
+            st.info("Hinweis: Die Server-ID findest du in Discord unter Entwicklermodus -> Rechtsklick auf den Server -> ID kopieren.")
 
         with st.sidebar.expander("Anleitung", expanded=False):
             st.markdown("1. Wähle links oben den Server im Dropdown aus.")
