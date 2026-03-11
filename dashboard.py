@@ -1204,7 +1204,7 @@ def _render_session_toast():
     """Renders a success toast/message if set in session state."""
     if "toast_message" in st.session_state:
         msg = st.session_state.toast_message
-        st.toastsg)
+        st.toast(msg)
         del st.session_state.toast_message
 
 # --- LOGIN LOGIK ---
