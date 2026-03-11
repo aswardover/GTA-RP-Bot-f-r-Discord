@@ -161,7 +161,7 @@ st.markdown("""
         color: #ffffff !important;
         border-radius: 10px !important;
         border: 0 !important;
-        padding: 0.48rem 0.95rem;
+        padding: 0.48, 0.95rem;
         font-weight: 700;
         letter-spacing: 0.02em;
     }
@@ -170,18 +170,27 @@ st.markdown("""
         transform: translateY(-1px) !important;
         box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
     }
-    /* Fix for white/secondary buttons to be dark/transparent */
-    .stButton > button[kind="secondary"],
-    .stButton > button[data-testid="stBaseButton-secondary"] {
+    /* Universal override for secondary/white buttons to be dark */
+    button[kind="secondary"],
+    button[kind="secondary"]:focus,
+    div[data-testid="stBaseButton-secondary"] > button,
+    button:not([kind="primary"]) {
         background: rgba(255,255,255,0.06) !important;
         border: 1px solid rgba(255,255,255,0.12) !important;
         color: #e2e8f0 !important;
     }
-    .stButton > button[kind="secondary"]:hover,
-    .stButton > button[data-testid="stBaseButton-secondary"]:hover {
+    button[kind="secondary"]:hover,
+    button:not([kind="primary"]):hover {
         background: rgba(255,255,255,0.12) !important;
         border-color: rgba(255,255,255,0.25) !important;
         color: #ffffff !important;
+    }
+    /* Restore primary button style for primary buttons specifically */
+    button[kind="primary"],
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(90deg, var(--as-accent-2), var(--as-accent)) !important;
+        color: #ffffff !important;
+        border: 0 !important;
     }
     .stTextInput input,
     .stTextArea textarea,
