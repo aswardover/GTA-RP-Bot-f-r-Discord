@@ -277,10 +277,34 @@ st.markdown("""
         border-bottom: 0;
     }
     [data-testid="stExpander"] {
-        border: 1px solid rgba(255,255,255,0.1);
+        border: 1px solid rgba(95,124,255,0.25);
         border-radius: 10px;
         background: rgba(255,255,255,0.02);
         margin-bottom: 0.55rem;
+        overflow: hidden;
+    }
+    [data-testid="stExpander"] details {
+        border: 0 !important;
+    }
+    [data-testid="stExpander"] details summary {
+        background: rgba(255,255,255,0.02);
+        border: 0 !important;
+        box-shadow: none !important;
+        outline: none !important;
+        min-height: 44px;
+    }
+    [data-testid="stExpander"] details summary:focus,
+    [data-testid="stExpander"] details summary:focus-visible {
+        outline: none !important;
+        box-shadow: inset 0 0 0 1px rgba(95,124,255,0.35) !important;
+    }
+    [data-testid="stExpander"] details[open] summary {
+        border-bottom: 1px solid rgba(95,124,255,0.2) !important;
+        background: rgba(95,124,255,0.08);
+    }
+    [data-testid="stExpander"] details > div {
+        border-top: 0 !important;
+        padding-top: 0.45rem;
     }
     [data-testid="stExpander"] details summary p {
         font-weight: 700;
@@ -974,6 +998,30 @@ else:
                         st.session_state.tickets_confirm_leave = False
                         st.session_state.tickets_editor_open = True
                         st.rerun()
+                    delete_from_overview = st.button("Panel loeschen", type="secondary")
+
+                if delete_from_overview:
+                    settings["ticket_panels"] = []
+                    settings["tickets_enabled"] = False
+                    settings["ticket_channel_id"] = ""
+                    settings["tickets_panel_channel_id"] = ""
+                    settings["tickets_panel_mode"] = "buttons"
+                    settings["tickets_panel_name"] = "Neues Ticket-Panel"
+                    settings["tickets_panel_title"] = "🎫 Ticket-System"
+                    settings["tickets_panel_description"] = "Waehle eine Option, um ein Ticket zu erstellen."
+                    settings["tickets_categories"] = []
+                    settings["tickets_manager_roles"] = []
+                    settings["tickets_open_category_id"] = ""
+                    settings["tickets_claimed_category_id"] = ""
+                    settings["tickets_closed_category_id"] = ""
+                    settings["tickets_transcript_channel_id"] = ""
+                    settings["tickets_transcript_dm_enabled"] = False
+                    settings["tickets_delete_on_close"] = True
+                    settings["tickets_opened_message"] = "Dein Ticket wurde erstellt. Bitte gib alle zusaetzlichen Informationen an."
+                    settings["tickets_publish_trigger"] = False
+                    save_settings(settings)
+                    st.success("Ticket-Panel wurde geloescht.")
+                    st.rerun()
 
                 with list_col:
                     panel = ticket_panels[0]
@@ -1011,6 +1059,13 @@ else:
                     discard_btn = st.button("Verwerfen")
                     save_btn = st.button("Speichern")
                     publish_btn = st.button("Veroeffentlichen")
+
+                st.session_state.tickets_confirm_delete = st.checkbox(
+                    "Panel wirklich loeschen",
+                    value=st.session_state.get("tickets_confirm_delete", False),
+                    key="tickets_confirm_delete_checkbox",
+                )
+                delete_btn = st.button("Panel jetzt loeschen", type="secondary")
 
                 with st.expander("Allgemein", expanded=True):
                     panel_channel_id = select_channel_id(
@@ -1121,6 +1176,36 @@ else:
                     st.session_state.pop("tickets_editor_snapshot", None)
                     st.session_state.tickets_confirm_leave = False
                     st.session_state.tickets_editor_open = False
+                    st.rerun()
+
+                if delete_btn:
+                    if not st.session_state.tickets_confirm_delete:
+                        st.error("Bitte bestaetige zuerst 'Panel wirklich loeschen'.")
+                        st.stop()
+                    settings["ticket_panels"] = []
+                    settings["tickets_enabled"] = False
+                    settings["ticket_channel_id"] = ""
+                    settings["tickets_panel_channel_id"] = ""
+                    settings["tickets_panel_mode"] = "buttons"
+                    settings["tickets_panel_name"] = "Neues Ticket-Panel"
+                    settings["tickets_panel_title"] = "🎫 Ticket-System"
+                    settings["tickets_panel_description"] = "Waehle eine Option, um ein Ticket zu erstellen."
+                    settings["tickets_categories"] = []
+                    settings["tickets_manager_roles"] = []
+                    settings["tickets_open_category_id"] = ""
+                    settings["tickets_claimed_category_id"] = ""
+                    settings["tickets_closed_category_id"] = ""
+                    settings["tickets_transcript_channel_id"] = ""
+                    settings["tickets_transcript_dm_enabled"] = False
+                    settings["tickets_delete_on_close"] = True
+                    settings["tickets_opened_message"] = "Dein Ticket wurde erstellt. Bitte gib alle zusaetzlichen Informationen an."
+                    settings["tickets_publish_trigger"] = False
+                    save_settings(settings)
+                    st.session_state.pop("tickets_editor_snapshot", None)
+                    st.session_state.tickets_confirm_leave = False
+                    st.session_state.tickets_confirm_delete = False
+                    st.session_state.tickets_editor_open = False
+                    st.success("Ticket-Panel wurde geloescht.")
                     st.rerun()
 
                 if save_btn or publish_btn:
