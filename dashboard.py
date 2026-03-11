@@ -940,16 +940,15 @@ else:
             display_to_key[label] = key
             display_to_entry[label] = entry
 
-        add_server_option = "Server Hinzufuegen"
+        add_server_option = "Server Hinzufügen"
         server_dropdown_options = [add_server_option] + display_labels
 
         if "sidebar_server_choice" not in st.session_state or st.session_state.sidebar_server_choice not in server_dropdown_options:
             st.session_state.sidebar_server_choice = display_labels[0]
 
         selected_dropdown_option = st.sidebar.selectbox(
-            "Server auswaehlen",
+            "Server auswählen",
             server_dropdown_options,
-            index=server_dropdown_options.index(st.session_state.sidebar_server_choice),
             key="sidebar_server_choice",
         )
 
@@ -959,7 +958,7 @@ else:
             selected_server_entry = display_to_entry.get(chosen_server_label, {"label": chosen_server_label, "key": selected_server_key, "guild_id": ""})
 
             st.sidebar.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
-            st.sidebar.markdown("#### Server Hinzufuegen")
+            st.sidebar.markdown("#### Server Hinzufügen")
             if is_root_admin:
                 new_server_name = st.sidebar.text_input("Servername", key="new_server_name")
                 new_server_id = st.sidebar.text_input("Server-ID (optional)", key="new_server_id")
@@ -1003,10 +1002,10 @@ else:
         settings["dashboard_server_name"] = chosen_server_label
 
         with st.sidebar.expander("Anleitung", expanded=False):
-            st.markdown("1. Waehle links oben den Server im Dropdown aus.")
-            st.markdown("2. Fuer neue Server zuerst Server Hinzufuegen nutzen und Bot ueber den Link einladen.")
-            st.markdown("3. Danach den Server wieder im Dropdown auswaehlen und Module konfigurieren.")
-            st.markdown("4. Jede Konfiguration wird im eigenen Server-Profil gespeichert und nicht uebernommen.")
+            st.markdown("1. Wähle links oben den Server im Dropdown aus.")
+            st.markdown("2. Für neue Server zuerst Server Hinzufügen nutzen und Bot über den Link einladen.")
+            st.markdown("3. Danach den Server wieder im Dropdown auswählen und Module konfigurieren.")
+            st.markdown("4. Jede Konfiguration wird im eigenen Server-Profil gespeichert und nicht übernommen.")
             st.markdown("5. Dashboard-Zugriffe pro Server verwaltest du in Einstellungen.")
 
         st.sidebar.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
@@ -1110,7 +1109,7 @@ else:
             st.rerun()
         
         if page == "Übersicht":
-            render_page_header("Bot Übersicht", "Schneller Ueberblick ueber Status und Kernmetriken.")
+            render_page_header("Bot Übersicht", "Schneller Überblick über Status und Kernmetriken.")
             guild_stats = _guild_stats_for_selected(discord_data, selected_server_entry)
             live_tickets = _live_ticket_count_for_selected(selected_server_entry)
             col1, col2, col3 = st.columns(3)
@@ -1125,7 +1124,7 @@ else:
             st.markdown('<div class="status-card">Bot erfolgreich gestartet. Alle Systeme laufen nominal.</div>', unsafe_allow_html=True)
 
         elif page == "Tickets":
-            render_page_header("Ticketsystem", "Uebersicht und pro Panel ein strukturierter Editor.")
+            render_page_header("Ticketsystem", "Übersicht und pro Panel ein strukturierter Editor.")
 
             if "tickets_editor_open" not in st.session_state:
                 st.session_state.tickets_editor_open = False
@@ -1139,7 +1138,7 @@ else:
                         "panel_channel_id": settings.get("tickets_panel_channel_id"),
                         "manager_roles": settings.get("tickets_manager_roles", []),
                         "panel_title": settings.get("tickets_panel_title", "🎫 Ticket-System"),
-                        "panel_description": settings.get("tickets_panel_description", "Waehle eine Option, um ein Ticket zu erstellen."),
+                        "panel_description": settings.get("tickets_panel_description", "Wähle eine Option, um ein Ticket zu erstellen."),
                         "panel_mode": settings.get("tickets_panel_mode", "buttons"),
                         "options": settings.get("tickets_categories", []),
                         "open_category_id": settings.get("tickets_open_category_id"),
@@ -1148,7 +1147,7 @@ else:
                         "transcript_channel_id": settings.get("tickets_transcript_channel_id"),
                         "transcript_dm_enabled": settings.get("tickets_transcript_dm_enabled", False),
                         "delete_on_close": settings.get("tickets_delete_on_close", True),
-                        "opened_message": settings.get("tickets_opened_message", "Dein Ticket wurde erstellt. Bitte gib alle zusaetzlichen Informationen an."),
+                        "opened_message": settings.get("tickets_opened_message", "Dein Ticket wurde erstellt. Bitte gib alle zusätzlichen Informationen an."),
                     }
                 ]
 
@@ -1162,7 +1161,7 @@ else:
 
                 stat_left, stat_right = st.columns([7, 3])
                 with stat_left:
-                    st.caption("Die Befehle koennen nur von Ticketmanagern in einem Ticketkanal ausgefuehrt werden.")
+                    st.caption("Die Befehle können nur von Ticketmanagern in einem Ticketkanal ausgeführt werden.")
                 with stat_right:
                     st.markdown("<div style='text-align:right;'>1 / 10</div>", unsafe_allow_html=True)
 
@@ -1173,7 +1172,7 @@ else:
                         st.session_state.tickets_confirm_leave = False
                         st.session_state.tickets_editor_open = True
                         st.rerun()
-                    delete_from_overview = st.button("Panel loeschen", type="secondary")
+                    delete_from_overview = st.button("Panel löschen", type="secondary")
 
                 if delete_from_overview:
                     settings["ticket_panels"] = []
@@ -1183,7 +1182,7 @@ else:
                     settings["tickets_panel_mode"] = "buttons"
                     settings["tickets_panel_name"] = "Neues Ticket-Panel"
                     settings["tickets_panel_title"] = "🎫 Ticket-System"
-                    settings["tickets_panel_description"] = "Waehle eine Option, um ein Ticket zu erstellen."
+                    settings["tickets_panel_description"] = "Wähle eine Option, um ein Ticket zu erstellen."
                     settings["tickets_categories"] = []
                     settings["tickets_manager_roles"] = []
                     settings["tickets_open_category_id"] = ""
@@ -1192,16 +1191,16 @@ else:
                     settings["tickets_transcript_channel_id"] = ""
                     settings["tickets_transcript_dm_enabled"] = False
                     settings["tickets_delete_on_close"] = True
-                    settings["tickets_opened_message"] = "Dein Ticket wurde erstellt. Bitte gib alle zusaetzlichen Informationen an."
+                    settings["tickets_opened_message"] = "Dein Ticket wurde erstellt. Bitte gib alle zusätzlichen Informationen an."
                     settings["tickets_publish_trigger"] = False
                     save_settings(settings)
-                    st.success("Ticket-Panel wurde geloescht.")
+                    st.success("Ticket-Panel wurde gelöscht.")
                     st.rerun()
 
                 with list_col:
                     panel = ticket_panels[0]
                     channel_id_preview = panel.get("panel_channel_id") or "-"
-                    status_text = "Veroeffentlicht" if panel.get("enabled", False) else "Entwurf"
+                    status_text = "Veröffentlicht" if panel.get("enabled", False) else "Entwurf"
                     st.markdown(
                         f"<div class='ticket-panel-card'><div class='ticket-panel-head'><span>{panel.get('name', 'Neues Ticket-Panel')}</span>"
                         f"<span class='pill-ok'>{status_text}</span></div><div class='ticket-panel-meta'>Kanal-ID: {channel_id_preview}</div>"
@@ -1212,7 +1211,7 @@ else:
                 st.subheader("Befehle")
                 st.markdown("<div class='ticket-command-row'>/ticket-claim - Beanspruche ein Ticket</div>", unsafe_allow_html=True)
                 st.markdown("<div class='ticket-command-row'>/ticket-close - Schliesse ein Ticket</div>", unsafe_allow_html=True)
-                st.markdown("<div class='ticket-command-row'>/ticket-delete - optional ueber Kanal-Loeschung bei Close</div>", unsafe_allow_html=True)
+                st.markdown("<div class='ticket-command-row'>/ticket-delete - optional über Kanal-Löschung bei Close</div>", unsafe_allow_html=True)
 
                 settings["ticket_panels"] = ticket_panels
                 settings["tickets_enabled"] = ticket_panels[0].get("enabled", False)
@@ -1233,18 +1232,18 @@ else:
                 with action_col:
                     discard_btn = st.button("Verwerfen")
                     save_btn = st.button("Speichern")
-                    publish_btn = st.button("Veroeffentlichen")
+                    publish_btn = st.button("Veröffentlichen")
 
                 st.session_state.tickets_confirm_delete = st.checkbox(
-                    "Panel wirklich loeschen",
+                    "Panel wirklich löschen",
                     value=st.session_state.get("tickets_confirm_delete", False),
                     key="tickets_confirm_delete_checkbox",
                 )
-                delete_btn = st.button("Panel jetzt loeschen", type="secondary")
+                delete_btn = st.button("Panel jetzt löschen", type="secondary")
 
                 with st.expander("Allgemein", expanded=True):
                     panel_channel_id = select_channel_id(
-                        "Kanal veroeffentlichen",
+                        "Kanal veröffentlichen",
                         channels_map,
                         panel.get("panel_channel_id"),
                         "tickets_panel_editor_channel",
@@ -1259,7 +1258,7 @@ else:
 
                 with st.expander("Panel", expanded=True):
                     panel_title = st.text_input("Titel des Ticket-Panels", value=panel.get("panel_title", "🎫 Ticket-System"))
-                    panel_description = st.text_area("Beschreibung", value=panel.get("panel_description", "Waehle eine Option, um ein Ticket zu erstellen."))
+                    panel_description = st.text_area("Beschreibung", value=panel.get("panel_description", "Wähle eine Option, um ein Ticket zu erstellen."))
 
                 with st.expander("Ticketarten", expanded=True):
                     panel_mode = st.radio(
@@ -1276,11 +1275,11 @@ else:
                         base = existing_options[idx] if idx < len(existing_options) and isinstance(existing_options[idx], dict) else {}
                         st.markdown(f"**Option {idx + 1}**")
                         opt_emoji = st.text_input("Emoji", value=str(base.get("emoji", "📩")), key=f"ticket_editor_emoji_{idx}")
-                        opt_name = st.text_input("Buttonname", value=str(base.get("name", f"Ticket oeffnen {idx + 1}")), key=f"ticket_editor_name_{idx}")
+                        opt_name = st.text_input("Buttonname", value=str(base.get("name", f"Ticket öffnen {idx + 1}")), key=f"ticket_editor_name_{idx}")
                         opt_desc = st.text_input("Beschreibung", value=str(base.get("description", "Unser Team kann dir helfen!")), key=f"ticket_editor_desc_{idx}")
-                        opt_cat_open = select_category_id("Kategorie fuer erstellte Tickets", categories_map, base.get("category_channel_id"), f"ticket_editor_open_cat_{idx}", allow_manual_input=False)
-                        opt_cat_claimed = select_category_id("Kategorie fuer beanspruchte Tickets", categories_map, panel.get("claimed_category_id"), f"ticket_editor_claim_cat_{idx}", allow_manual_input=False)
-                        opt_cat_closed = select_category_id("Kategorie fuer geschlossene Tickets", categories_map, panel.get("closed_category_id"), f"ticket_editor_close_cat_{idx}", allow_manual_input=False)
+                        opt_cat_open = select_category_id("Kategorie für erstellte Tickets", categories_map, base.get("category_channel_id"), f"ticket_editor_open_cat_{idx}", allow_manual_input=False)
+                        opt_cat_claimed = select_category_id("Kategorie für beanspruchte Tickets", categories_map, panel.get("claimed_category_id"), f"ticket_editor_claim_cat_{idx}", allow_manual_input=False)
+                        opt_cat_closed = select_category_id("Kategorie für geschlossene Tickets", categories_map, panel.get("closed_category_id"), f"ticket_editor_close_cat_{idx}", allow_manual_input=False)
                         built_options.append(
                             {
                                 "emoji": opt_emoji,
@@ -1291,10 +1290,10 @@ else:
                             }
                         )
 
-                with st.expander("Nachricht zur Ticketeroeffnung", expanded=True):
+                with st.expander("Nachricht zur Ticketeröffnung", expanded=True):
                     opened_message = st.text_area(
                         "Nachrichtstext",
-                        value=panel.get("opened_message", "Dein Ticket wurde erstellt. Bitte gib alle zusaetzlichen Informationen an."),
+                        value=panel.get("opened_message", "Dein Ticket wurde erstellt. Bitte gib alle zusätzlichen Informationen an."),
                     )
 
                 with st.expander("Ticket-Transkripte", expanded=True):
@@ -1335,9 +1334,9 @@ else:
                 }
                 has_unsaved_changes = draft_panel != st.session_state.tickets_editor_snapshot
                 if has_unsaved_changes:
-                    st.warning("Es gibt ungespeicherte Aenderungen.")
+                    st.warning("Es gibt ungespeicherte Änderungen.")
                     st.session_state.tickets_confirm_leave = st.checkbox(
-                        "Ungespeicherte Aenderungen beim Verlassen verwerfen",
+                        "Ungespeicherte Änderungen beim Verlassen verwerfen",
                         value=st.session_state.tickets_confirm_leave,
                         key="tickets_confirm_leave_checkbox",
                     )
@@ -1346,7 +1345,7 @@ else:
 
                 if back_btn or discard_btn:
                     if has_unsaved_changes and not st.session_state.tickets_confirm_leave:
-                        st.error("Bitte bestaetige zuerst das Verwerfen ungespeicherter Aenderungen.")
+                        st.error("Bitte bestätige zuerst das Verwerfen ungespeicherter Änderungen.")
                         st.stop()
                     st.session_state.pop("tickets_editor_snapshot", None)
                     st.session_state.tickets_confirm_leave = False
@@ -1355,7 +1354,7 @@ else:
 
                 if delete_btn:
                     if not st.session_state.tickets_confirm_delete:
-                        st.error("Bitte bestaetige zuerst 'Panel wirklich loeschen'.")
+                        st.error("Bitte bestätige zuerst 'Panel wirklich löschen'.")
                         st.stop()
                     settings["ticket_panels"] = []
                     settings["tickets_enabled"] = False
@@ -1364,7 +1363,7 @@ else:
                     settings["tickets_panel_mode"] = "buttons"
                     settings["tickets_panel_name"] = "Neues Ticket-Panel"
                     settings["tickets_panel_title"] = "🎫 Ticket-System"
-                    settings["tickets_panel_description"] = "Waehle eine Option, um ein Ticket zu erstellen."
+                    settings["tickets_panel_description"] = "Wähle eine Option, um ein Ticket zu erstellen."
                     settings["tickets_categories"] = []
                     settings["tickets_manager_roles"] = []
                     settings["tickets_open_category_id"] = ""
@@ -1373,14 +1372,14 @@ else:
                     settings["tickets_transcript_channel_id"] = ""
                     settings["tickets_transcript_dm_enabled"] = False
                     settings["tickets_delete_on_close"] = True
-                    settings["tickets_opened_message"] = "Dein Ticket wurde erstellt. Bitte gib alle zusaetzlichen Informationen an."
+                    settings["tickets_opened_message"] = "Dein Ticket wurde erstellt. Bitte gib alle zusätzlichen Informationen an."
                     settings["tickets_publish_trigger"] = False
                     save_settings(settings)
                     st.session_state.pop("tickets_editor_snapshot", None)
                     st.session_state.tickets_confirm_leave = False
                     st.session_state.tickets_confirm_delete = False
                     st.session_state.tickets_editor_open = False
-                    st.success("Ticket-Panel wurde geloescht.")
+                    st.success("Ticket-Panel wurde gelöscht.")
                     st.rerun()
 
                 if save_btn or publish_btn:
@@ -1414,10 +1413,10 @@ else:
                     save_settings(settings)
                     st.session_state.tickets_editor_snapshot = deepcopy(panel)
                     st.session_state.tickets_confirm_leave = False
-                    st.success("Ticket-Panel gespeichert." if save_btn else "Ticket-Panel gespeichert und wird veroeffentlicht.")
+                    st.success("Ticket-Panel gespeichert." if save_btn else "Ticket-Panel gespeichert und wird veröffentlicht.")
 
         elif page == "Stempeluhr":
-            render_page_header("Stempeluhr System", "Uebersicht und strukturierter Editor fuer Rollen und Panel-Verwaltung.")
+            render_page_header("Stempeluhr System", "Übersicht und strukturierter Editor für Rollen und Panel-Verwaltung.")
 
             if "stempeluhr_editor_open" not in st.session_state:
                 st.session_state.stempeluhr_editor_open = False
@@ -1448,7 +1447,7 @@ else:
 
                 stat_left, stat_right = st.columns([7, 3])
                 with stat_left:
-                    st.caption("Nur berechtigte Rollen koennen Ein-/Ausstempeln verwenden.")
+                    st.caption("Nur berechtigte Rollen können Ein-/Ausstempeln verwenden.")
                 with stat_right:
                     st.markdown("<div style='text-align:right;'>1 / 1</div>", unsafe_allow_html=True)
 
@@ -1463,7 +1462,7 @@ else:
                 with list_col:
                     panel = stempel_panels[0]
                     channel_id_preview = panel.get("panel_channel_id") or "-"
-                    status_text = "Veroeffentlicht" if panel.get("enabled", False) else "Entwurf"
+                    status_text = "Veröffentlicht" if panel.get("enabled", False) else "Entwurf"
                     ein_count = len(panel.get("ein_roles", []) or [])
                     aus_count = len(panel.get("aus_roles", []) or [])
                     st.markdown(
@@ -1496,7 +1495,7 @@ else:
                 with action_col:
                     discard_btn = st.button("Verwerfen", key="stempeluhr_discard")
                     save_btn = st.button("Speichern", key="stempeluhr_save")
-                    publish_btn = st.button("Veroeffentlichen", key="stempeluhr_publish")
+                    publish_btn = st.button("Veröffentlichen", key="stempeluhr_publish")
 
                 with st.expander("Allgemein", expanded=True):
                     stempeluhr_enabled = st.checkbox("Stempeluhr aktivieren", value=panel.get("enabled", False), key="stempeluhr_editor_enabled")
@@ -1525,14 +1524,14 @@ else:
                     )
                     manual_ein_ids = parse_id_list(
                         st.text_input(
-                            "Rollen-IDs fuer /stempel_ein (Fallback, komma-separiert)",
+                            "Rollen-IDs für /stempel_ein (Fallback, komma-separiert)",
                             value=", ".join([str(x) for x in panel.get("ein_roles", [])]),
                             key="stempeluhr_editor_ein_roles_manual",
                         )
                     )
                     manual_aus_ids = parse_id_list(
                         st.text_input(
-                            "Rollen-IDs fuer /stempel_aus (Fallback, komma-separiert)",
+                            "Rollen-IDs für /stempel_aus (Fallback, komma-separiert)",
                             value=", ".join([str(x) for x in panel.get("aus_roles", [])]),
                             key="stempeluhr_editor_aus_roles_manual",
                         )
@@ -1553,9 +1552,9 @@ else:
 
                 has_unsaved_changes = draft_panel != st.session_state.stempeluhr_editor_snapshot
                 if has_unsaved_changes:
-                    st.warning("Es gibt ungespeicherte Aenderungen.")
+                    st.warning("Es gibt ungespeicherte Änderungen.")
                     st.session_state.stempeluhr_confirm_leave = st.checkbox(
-                        "Ungespeicherte Aenderungen beim Verlassen verwerfen",
+                        "Ungespeicherte Änderungen beim Verlassen verwerfen",
                         value=st.session_state.stempeluhr_confirm_leave,
                         key="stempeluhr_confirm_leave_checkbox",
                     )
@@ -1564,7 +1563,7 @@ else:
 
                 if back_btn or discard_btn:
                     if has_unsaved_changes and not st.session_state.stempeluhr_confirm_leave:
-                        st.error("Bitte bestaetige zuerst das Verwerfen ungespeicherter Aenderungen.")
+                        st.error("Bitte bestätige zuerst das Verwerfen ungespeicherter Änderungen.")
                         st.stop()
                     st.session_state.pop("stempeluhr_editor_snapshot", None)
                     st.session_state.stempeluhr_confirm_leave = False
@@ -1590,7 +1589,7 @@ else:
                     save_settings(settings)
                     st.session_state.stempeluhr_editor_snapshot = deepcopy(panel)
                     st.session_state.stempeluhr_confirm_leave = False
-                    st.success("Stempeluhr gespeichert." if save_btn else "Stempeluhr gespeichert und Panel wird veroeffentlicht.")
+                    st.success("Stempeluhr gespeichert." if save_btn else "Stempeluhr gespeichert und Panel wird veröffentlicht.")
 
         elif page == "Automod":
             render_page_header("Automod", "Schütze den Server mit Spam-, Caps- und Wortfiltern.")
@@ -1626,7 +1625,7 @@ else:
                 st.success("Automod-Einstellungen gespeichert!")
 
         elif page == "Server Tools":
-            render_page_header("Server Tools", "Moderationstools fuer den RP-Alltag: Slowmode, Lock/Unlock, Timeout.")
+            render_page_header("Server Tools", "Moderationstools für den RP-Alltag: Slowmode, Lock/Unlock, Timeout.")
             tools_enabled = st.checkbox("Server Tools aktivieren", value=settings.get("server_tools_enabled", True))
             st.info("Neue Befehle: /slowmode, /lock, /unlock, /timeout, /untimeout")
             if st.button("Server Tools speichern"):
@@ -1635,7 +1634,7 @@ else:
                 st.success("Server Tools gespeichert.")
 
         elif page == "Wenn-Funktionen":
-            render_page_header("Wenn-Funktionen", "Eventbasierte Regeln fuer Rollen-Events und Auto-Aktionen.")
+            render_page_header("Wenn-Funktionen", "Eventbasierte Regeln für Rollen-Events und Auto-Aktionen.")
             
             custom_rules = settings.get("custom_rules", [])
             
@@ -1655,10 +1654,10 @@ else:
                 settings["custom_rules_enabled"] = custom_enabled
                 role_id_value = manual_rule_role_id.strip() or (str(roles_map[selected_role]) if selected_role else "")
                 if not role_id_value:
-                    st.error("Bitte waehle eine Rolle oder trage eine Rollen-ID ein.")
+                    st.error("Bitte wähle eine Rolle oder trage eine Rollen-ID ein.")
                     st.stop()
                 if not selected_channel_id:
-                    st.error("Bitte waehle einen Channel oder trage eine Channel-ID ein.")
+                    st.error("Bitte wähle einen Channel oder trage eine Channel-ID ein.")
                     st.stop()
                 new_rule = {
                     "event": event,
@@ -1702,7 +1701,7 @@ else:
                 st.success("Giveaway Embed gespeichert!")
 
         elif page == "Ankündigungen":
-            render_page_header("Ankuendigungen", "Steuere Channel, Embed-Layout und Publishing fuer Ankuendigungen.")
+            render_page_header("Ankündigungen", "Steuere Channel, Embed-Layout und Publishing für Ankündigungen.")
             announce_enabled = st.checkbox("Ankündigungen aktivieren", value=settings.get("announce_enabled", True))
             current_announce_channel = settings.get("announce_channel_id", "")
             announce_channel_id = select_channel_id("Ankündigungs-Channel", channels_map, current_announce_channel, "announce_channel")
@@ -1739,7 +1738,7 @@ else:
                 st.success("Ankündigung wird veröffentlicht.")
 
         elif page == "Reaction Roles":
-            render_page_header("Reaction Roles", "Baue selbsterklaerende Rollen-Panels mit Emoji-Zuordnung.")
+            render_page_header("Reaction Roles", "Baue selbsterklärende Rollen-Panels mit Emoji-Zuordnung.")
             reaction_roles_enabled = st.checkbox("Reaction Roles aktivieren", value=settings.get("reaction_roles_enabled", False))
             rr_data = load_reaction_roles()
             
@@ -1794,7 +1793,7 @@ else:
                     st.error("Channel und Titel erforderlich!")
 
         elif page == "Umfragen":
-            render_page_header("Umfragen", "Definiere Titel, Farbe und Footer fuer Poll-Embeds.")
+            render_page_header("Umfragen", "Definiere Titel, Farbe und Footer für Poll-Embeds.")
             polls_enabled = st.checkbox("Umfragen aktivieren", value=settings.get("polls_enabled", False))
             
             poll_embed_title = st.text_input("Embed Titel", value=settings.get("poll_embed_title", "📊 Umfrage"))
@@ -1856,7 +1855,7 @@ else:
                 st.success("Logging gespeichert!")
 
         elif page == "Einstellungen":
-            render_page_header("Allgemeine Einstellungen", "Globale Basiswerte fuer Prefix und Kern-Module.")
+            render_page_header("Allgemeine Einstellungen", "Globale Basiswerte für Prefix und Kern-Module.")
             active_server_label = st.session_state.get("active_server_label", settings.get("dashboard_server_name", "ASWARD Server"))
             active_server_key = st.session_state.get("active_server_key", "default")
             st.info(f"Aktiver Server-Kontext: {active_server_label}")
@@ -1885,17 +1884,17 @@ else:
                 st.caption("Nur deine Owner-ID kann diese Liste bearbeiten.")
                 if st.button("Dashboard-Benutzer speichern"):
                     _set_allowed_ids_for_server(active_server_key, parse_id_list(allowed_input))
-                    st.success("Zugriffsrechte fuer den ausgewaehlten Server gespeichert.")
+                    st.success("Zugriffsrechte für den ausgewählten Server gespeichert.")
                     st.rerun()
             else:
                 st.write("Freigegebene IDs:")
                 st.code("\n".join(current_allowed_ids) if current_allowed_ids else "Keine weiteren Benutzer freigegeben.")
-                st.info("Nur die Owner-ID kann Dashboard-Benutzer je Server hinzufuegen oder entfernen.")
+                st.info("Nur die Owner-ID kann Dashboard-Benutzer je Server hinzufügen oder entfernen.")
 
         elif page == "Embed Hub":
             render_page_header("Embed Hub", "Zentrale Konfiguration fuer alle wichtigen Embed-Vorlagen.")
 
-            with st.expander("Ankuendigungs-Embed", expanded=True):
+            with st.expander("Ankündigungs-Embed", expanded=True):
                 title, desc, color, footer = embed_config_block(
                     settings,
                     "announce_embed",
