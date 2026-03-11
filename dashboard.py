@@ -1921,6 +1921,8 @@ else:
                                 "aus_roles": [],
                             }
                         )
+                        settings["stempeluhr_panels"] = stempel_panels
+                        save_settings(settings)
                         st.session_state.stempeluhr_selected_index = len(stempel_panels) - 1
                         st.session_state.stempeluhr_editor_snapshot = deepcopy(stempel_panels[st.session_state.stempeluhr_selected_index])
                         st.session_state.stempeluhr_confirm_leave = False
