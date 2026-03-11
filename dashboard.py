@@ -1056,18 +1056,19 @@ else:
             "Auto Mod": "Automod",
             "If Rules": "Wenn-Funktionen",
             "Giveaway": "Giveaway",
-            "Announcements": "Ankündigungen",
+            "Ankündigungen": "Ankündigungen",
             "Reaction Roles": "Reaction Roles",
-            "Polls": "Umfragen",
-            "Moderation": "Moderation",
+            "Custom Commands": "Custom Commands",
+            "Umfragen": "Umfragen",
+            "Warns/Sanktionen": "Warns/Sanktionen",
             "Logging": "Logging",
             "Embed Hub": "Embed Hub",
             "Settings": "Einstellungen",
         }
         nav_sections = [
             ("Grundlegende Informationen", ["Overview", "Tickets", "Stempeluhr"]),
-            ("Server-Verwaltung", ["Server Tools", "Auto Mod", "Moderation", "Logging"]),
-            ("Engagement", ["Announcements", "Reaction Roles", "Polls", "Giveaway", "If Rules", "Embed Hub"]),
+            ("Server-Verwaltung", ["Server Tools", "Auto Mod", "Warns/Sanktionen", "Logging"]),
+            ("Engagement", ["Ankündigungen", "Reaction Roles", "Custom Commands", "Umfragen", "Giveaway", "If Rules", "Embed Hub"]),
             ("System", ["Settings"]),
         ]
         nav_icon_map = {
@@ -1078,16 +1079,23 @@ else:
             "Auto Mod": "🛡",
             "If Rules": "↯",
             "Giveaway": "🎁",
-            "Announcements": "📣",
+            "Ankündigungen": "📣",
             "Reaction Roles": "◎",
-            "Polls": "🗳",
-            "Moderation": "⚖",
+            "Custom Commands": "⌘",
+            "Umfragen": "🗳",
+            "Warns/Sanktionen": "⚖",
             "Logging": "⎘",
             "Embed Hub": "◈",
             "Settings": "⚙",
         }
 
         nav_options = list(page_map.keys())
+        if st.session_state.get("active_page") == "Announcements":
+            st.session_state.active_page = "Ankündigungen"
+        if st.session_state.get("active_page") == "Polls":
+            st.session_state.active_page = "Umfragen"
+        if st.session_state.get("active_page") == "Moderation":
+            st.session_state.active_page = "Warns/Sanktionen"
         if "active_page" not in st.session_state or st.session_state.active_page not in nav_options:
             st.session_state.active_page = nav_options[0]
 
@@ -1099,6 +1107,7 @@ else:
                 is_active = st.session_state.active_page == nav_key
                 if st.sidebar.button(nav_label, key=f"nav_btn_{nav_key}", use_container_width=True, type="primary" if is_active else "secondary"):
                     st.session_state.active_page = nav_key
+                    st.rerun()
             st.sidebar.markdown("<div class='sidebar-section-gap'></div>", unsafe_allow_html=True)
 
         page = page_map[st.session_state.active_page]
@@ -1128,6 +1137,8 @@ else:
 
             if "tickets_editor_open" not in st.session_state:
                 st.session_state.tickets_editor_open = False
+            if "tickets_selected_index" not in st.session_state:
+                st.session_state.tickets_selected_index = 0
 
             ticket_panels = settings.get("ticket_panels") if isinstance(settings.get("ticket_panels"), list) else []
             if not ticket_panels:
@@ -1163,50 +1174,90 @@ else:
                 with stat_left:
                     st.caption("Die Befehle können nur von Ticketmanagern in einem Ticketkanal ausgeführt werden.")
                 with stat_right:
-                    st.markdown("<div style='text-align:right;'>1 / 10</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:right;'>{len(ticket_panels)} / 10</div>", unsafe_allow_html=True)
 
                 list_col, action_col = st.columns([8, 2])
                 with action_col:
                     if st.button("+ Ein Panel erstellen"):
-                        st.session_state.tickets_editor_snapshot = deepcopy(ticket_panels[0])
+                        ticket_panels.append(
+                            {
+                                "name": f"Neues Ticket-Panel {len(ticket_panels) + 1}",
+                                "enabled": False,
+                                "panel_channel_id": "",
+                                "manager_roles": [],
+                                "panel_title": "🎫 Ticket-System",
+                                "panel_description": "Wähle eine Option, um ein Ticket zu erstellen.",
+                                "panel_mode": "buttons",
+                                "options": [],
+                                "open_category_id": "",
+                                "claimed_category_id": "",
+                                "closed_category_id": "",
+                                "transcript_channel_id": "",
+                                "transcript_dm_enabled": False,
+                                "delete_on_close": True,
+                                "opened_message": "Dein Ticket wurde erstellt. Bitte gib alle zusätzlichen Informationen an.",
+                            }
+                        )
+                        st.session_state.tickets_selected_index = len(ticket_panels) - 1
+                        st.session_state.tickets_editor_snapshot = deepcopy(ticket_panels[st.session_state.tickets_selected_index])
                         st.session_state.tickets_confirm_leave = False
                         st.session_state.tickets_editor_open = True
                         st.rerun()
-                    delete_from_overview = st.button("Panel löschen", type="secondary")
+                    delete_from_overview = st.button("Markierte löschen", type="secondary")
 
                 if delete_from_overview:
-                    settings["ticket_panels"] = []
-                    settings["tickets_enabled"] = False
-                    settings["ticket_channel_id"] = ""
-                    settings["tickets_panel_channel_id"] = ""
-                    settings["tickets_panel_mode"] = "buttons"
-                    settings["tickets_panel_name"] = "Neues Ticket-Panel"
-                    settings["tickets_panel_title"] = "🎫 Ticket-System"
-                    settings["tickets_panel_description"] = "Wähle eine Option, um ein Ticket zu erstellen."
-                    settings["tickets_categories"] = []
-                    settings["tickets_manager_roles"] = []
-                    settings["tickets_open_category_id"] = ""
-                    settings["tickets_claimed_category_id"] = ""
-                    settings["tickets_closed_category_id"] = ""
-                    settings["tickets_transcript_channel_id"] = ""
-                    settings["tickets_transcript_dm_enabled"] = False
-                    settings["tickets_delete_on_close"] = True
-                    settings["tickets_opened_message"] = "Dein Ticket wurde erstellt. Bitte gib alle zusätzlichen Informationen an."
-                    settings["tickets_publish_trigger"] = False
+                    remaining_panels = []
+                    for idx, panel_item in enumerate(ticket_panels):
+                        if not st.session_state.get(f"ticket_delete_mark_{idx}", False):
+                            remaining_panels.append(panel_item)
+
+                    ticket_panels = remaining_panels
+                    settings["ticket_panels"] = ticket_panels
+                    if not ticket_panels:
+                        settings["tickets_enabled"] = False
+                        settings["ticket_channel_id"] = ""
+                        settings["tickets_panel_channel_id"] = ""
+                        settings["tickets_panel_mode"] = "buttons"
+                        settings["tickets_panel_name"] = "Neues Ticket-Panel"
+                        settings["tickets_panel_title"] = "🎫 Ticket-System"
+                        settings["tickets_panel_description"] = "Wähle eine Option, um ein Ticket zu erstellen."
+                        settings["tickets_categories"] = []
+                        settings["tickets_manager_roles"] = []
+                        settings["tickets_open_category_id"] = ""
+                        settings["tickets_claimed_category_id"] = ""
+                        settings["tickets_closed_category_id"] = ""
+                        settings["tickets_transcript_channel_id"] = ""
+                        settings["tickets_transcript_dm_enabled"] = False
+                        settings["tickets_delete_on_close"] = True
+                        settings["tickets_opened_message"] = "Dein Ticket wurde erstellt. Bitte gib alle zusätzlichen Informationen an."
+                        settings["tickets_publish_trigger"] = False
+                        st.session_state.tickets_selected_index = 0
+                    else:
+                        st.session_state.tickets_selected_index = min(st.session_state.tickets_selected_index, len(ticket_panels) - 1)
                     save_settings(settings)
-                    st.success("Ticket-Panel wurde gelöscht.")
+                    st.success("Markierte Ticket-Panels wurden gelöscht.")
                     st.rerun()
 
                 with list_col:
-                    panel = ticket_panels[0]
-                    channel_id_preview = panel.get("panel_channel_id") or "-"
-                    status_text = "Veröffentlicht" if panel.get("enabled", False) else "Entwurf"
-                    st.markdown(
-                        f"<div class='ticket-panel-card'><div class='ticket-panel-head'><span>{panel.get('name', 'Neues Ticket-Panel')}</span>"
-                        f"<span class='pill-ok'>{status_text}</span></div><div class='ticket-panel-meta'>Kanal-ID: {channel_id_preview}</div>"
-                        f"<div class='ticket-panel-meta'>Modus: {panel.get('panel_mode', 'buttons')}</div></div>",
-                        unsafe_allow_html=True,
-                    )
+                    for idx, panel in enumerate(ticket_panels):
+                        channel_id_preview = panel.get("panel_channel_id") or "-"
+                        status_text = "Veröffentlicht" if panel.get("enabled", False) else "Entwurf"
+                        st.markdown(
+                            f"<div class='ticket-panel-card'><div class='ticket-panel-head'><span>{panel.get('name', f'Ticket-Panel {idx + 1}')}</span>"
+                            f"<span class='pill-ok'>{status_text}</span></div><div class='ticket-panel-meta'>Kanal-ID: {channel_id_preview}</div>"
+                            f"<div class='ticket-panel-meta'>Modus: {panel.get('panel_mode', 'buttons')}</div></div>",
+                            unsafe_allow_html=True,
+                        )
+                        row_col1, row_col2 = st.columns([3, 2])
+                        with row_col1:
+                            if st.button(f"Panel {idx + 1} bearbeiten", key=f"ticket_edit_btn_{idx}"):
+                                st.session_state.tickets_selected_index = idx
+                                st.session_state.tickets_editor_snapshot = deepcopy(ticket_panels[idx])
+                                st.session_state.tickets_confirm_leave = False
+                                st.session_state.tickets_editor_open = True
+                                st.rerun()
+                        with row_col2:
+                            st.checkbox("Zum Löschen markieren", key=f"ticket_delete_mark_{idx}")
 
                 st.subheader("Befehle")
                 st.markdown("<div class='ticket-command-row'>/ticket-claim - Beanspruche ein Ticket</div>", unsafe_allow_html=True)
@@ -1214,11 +1265,15 @@ else:
                 st.markdown("<div class='ticket-command-row'>/ticket-delete - optional über Kanal-Löschung bei Close</div>", unsafe_allow_html=True)
 
                 settings["ticket_panels"] = ticket_panels
-                settings["tickets_enabled"] = ticket_panels[0].get("enabled", False)
+                settings["tickets_enabled"] = any(p.get("enabled", False) for p in ticket_panels)
                 save_settings(settings)
 
             else:
-                panel = ticket_panels[0]
+                if not ticket_panels:
+                    st.session_state.tickets_editor_open = False
+                    st.rerun()
+                selected_idx = min(st.session_state.get("tickets_selected_index", 0), len(ticket_panels) - 1)
+                panel = ticket_panels[selected_idx]
                 if "tickets_editor_snapshot" not in st.session_state:
                     st.session_state.tickets_editor_snapshot = deepcopy(panel)
                 if "tickets_confirm_leave" not in st.session_state:
@@ -1384,7 +1439,7 @@ else:
 
                 if save_btn or publish_btn:
                     panel.update(draft_panel)
-                    ticket_panels[0] = panel
+                    ticket_panels[selected_idx] = panel
                     settings["ticket_panels"] = ticket_panels
 
                     # Keep backend compatibility for current ticket cog.
@@ -1420,6 +1475,8 @@ else:
 
             if "stempeluhr_editor_open" not in st.session_state:
                 st.session_state.stempeluhr_editor_open = False
+            if "stempeluhr_selected_index" not in st.session_state:
+                st.session_state.stempeluhr_selected_index = 0
 
             stempel_panels = settings.get("stempeluhr_panels") if isinstance(settings.get("stempeluhr_panels"), list) else []
             if not stempel_panels:
@@ -1449,39 +1506,86 @@ else:
                 with stat_left:
                     st.caption("Nur berechtigte Rollen können Ein-/Ausstempeln verwenden.")
                 with stat_right:
-                    st.markdown("<div style='text-align:right;'>1 / 1</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:right;'>{len(stempel_panels)} / 5</div>", unsafe_allow_html=True)
 
                 list_col, action_col = st.columns([8, 2])
                 with action_col:
-                    if st.button("+ Panel bearbeiten", key="stempeluhr_open_editor"):
-                        st.session_state.stempeluhr_editor_snapshot = deepcopy(stempel_panels[0])
+                    if st.button("+ Ein Panel erstellen", key="stempeluhr_new_panel"):
+                        stempel_panels.append(
+                            {
+                                "name": f"Stempeluhr Panel {len(stempel_panels) + 1}",
+                                "enabled": False,
+                                "panel_channel_id": "",
+                                "ein_roles": [],
+                                "aus_roles": [],
+                            }
+                        )
+                        st.session_state.stempeluhr_selected_index = len(stempel_panels) - 1
+                        st.session_state.stempeluhr_editor_snapshot = deepcopy(stempel_panels[st.session_state.stempeluhr_selected_index])
                         st.session_state.stempeluhr_confirm_leave = False
                         st.session_state.stempeluhr_editor_open = True
                         st.rerun()
+                    delete_stempel_from_overview = st.button("Markierte löschen", key="stempeluhr_delete_marked", type="secondary")
+
+                if delete_stempel_from_overview:
+                    remaining_stempel = []
+                    for idx, panel_item in enumerate(stempel_panels):
+                        if not st.session_state.get(f"stempeluhr_delete_mark_{idx}", False):
+                            remaining_stempel.append(panel_item)
+                    stempel_panels = remaining_stempel
+                    settings["stempeluhr_panels"] = stempel_panels
+                    if not stempel_panels:
+                        settings["stempeluhr_enabled"] = False
+                        settings["stempel_ein_roles"] = []
+                        settings["stempel_aus_roles"] = []
+                        settings["stempeluhr_allowed_roles"] = []
+                        settings["stempeluhr_admin_roles"] = []
+                        settings["stempeluhr_panel_channel_id"] = ""
+                        settings["stempeluhr_panel_name"] = "Stempeluhr Panel"
+                        st.session_state.stempeluhr_selected_index = 0
+                    else:
+                        st.session_state.stempeluhr_selected_index = min(st.session_state.stempeluhr_selected_index, len(stempel_panels) - 1)
+                    save_settings(settings)
+                    st.success("Markierte Stempeluhr-Panels wurden gelöscht.")
+                    st.rerun()
 
                 with list_col:
-                    panel = stempel_panels[0]
-                    channel_id_preview = panel.get("panel_channel_id") or "-"
-                    status_text = "Veröffentlicht" if panel.get("enabled", False) else "Entwurf"
-                    ein_count = len(panel.get("ein_roles", []) or [])
-                    aus_count = len(panel.get("aus_roles", []) or [])
-                    st.markdown(
-                        f"<div class='ticket-panel-card'><div class='ticket-panel-head'><span>{panel.get('name', 'Stempeluhr Panel')}</span>"
-                        f"<span class='pill-ok'>{status_text}</span></div><div class='ticket-panel-meta'>Kanal-ID: {channel_id_preview}</div>"
-                        f"<div class='ticket-panel-meta'>/stempel_ein Rollen: {ein_count} | /stempel_aus Rollen: {aus_count}</div></div>",
-                        unsafe_allow_html=True,
-                    )
+                    for idx, panel in enumerate(stempel_panels):
+                        channel_id_preview = panel.get("panel_channel_id") or "-"
+                        status_text = "Veröffentlicht" if panel.get("enabled", False) else "Entwurf"
+                        ein_count = len(panel.get("ein_roles", []) or [])
+                        aus_count = len(panel.get("aus_roles", []) or [])
+                        st.markdown(
+                            f"<div class='ticket-panel-card'><div class='ticket-panel-head'><span>{panel.get('name', f'Stempeluhr Panel {idx + 1}')}</span>"
+                            f"<span class='pill-ok'>{status_text}</span></div><div class='ticket-panel-meta'>Kanal-ID: {channel_id_preview}</div>"
+                            f"<div class='ticket-panel-meta'>/stempel_ein Rollen: {ein_count} | /stempel_aus Rollen: {aus_count}</div></div>",
+                            unsafe_allow_html=True,
+                        )
+                        row_col1, row_col2 = st.columns([3, 2])
+                        with row_col1:
+                            if st.button(f"Panel {idx + 1} bearbeiten", key=f"stempeluhr_edit_btn_{idx}"):
+                                st.session_state.stempeluhr_selected_index = idx
+                                st.session_state.stempeluhr_editor_snapshot = deepcopy(stempel_panels[idx])
+                                st.session_state.stempeluhr_confirm_leave = False
+                                st.session_state.stempeluhr_editor_open = True
+                                st.rerun()
+                        with row_col2:
+                            st.checkbox("Zum Löschen markieren", key=f"stempeluhr_delete_mark_{idx}")
 
                 st.subheader("Befehle")
                 st.markdown("<div class='ticket-command-row'>/stempel_ein - Schicht starten</div>", unsafe_allow_html=True)
                 st.markdown("<div class='ticket-command-row'>/stempel_aus - Schicht beenden</div>", unsafe_allow_html=True)
 
                 settings["stempeluhr_panels"] = stempel_panels
-                settings["stempeluhr_enabled"] = stempel_panels[0].get("enabled", False)
+                settings["stempeluhr_enabled"] = any(p.get("enabled", False) for p in stempel_panels)
                 save_settings(settings)
 
             else:
-                panel = stempel_panels[0]
+                if not stempel_panels:
+                    st.session_state.stempeluhr_editor_open = False
+                    st.rerun()
+                stempel_idx = min(st.session_state.get("stempeluhr_selected_index", 0), len(stempel_panels) - 1)
+                panel = stempel_panels[stempel_idx]
                 if "stempeluhr_editor_snapshot" not in st.session_state:
                     st.session_state.stempeluhr_editor_snapshot = deepcopy(panel)
                 if "stempeluhr_confirm_leave" not in st.session_state:
@@ -1572,7 +1676,7 @@ else:
 
                 if save_btn or publish_btn:
                     panel.update(draft_panel)
-                    stempel_panels[0] = panel
+                    stempel_panels[stempel_idx] = panel
                     settings["stempeluhr_panels"] = stempel_panels
 
                     settings["stempeluhr_enabled"] = panel.get("enabled", False)
@@ -1626,10 +1730,26 @@ else:
 
         elif page == "Server Tools":
             render_page_header("Server Tools", "Moderationstools für den RP-Alltag: Slowmode, Lock/Unlock, Timeout.")
-            tools_enabled = st.checkbox("Server Tools aktivieren", value=settings.get("server_tools_enabled", True))
+            legacy_default = settings.get("server_tools_enabled", True)
+            slowmode_enabled = st.checkbox("/slowmode aktivieren", value=settings.get("server_tools_slowmode_enabled", legacy_default))
+            lock_enabled = st.checkbox("/lock aktivieren", value=settings.get("server_tools_lock_enabled", legacy_default))
+            unlock_enabled = st.checkbox("/unlock aktivieren", value=settings.get("server_tools_unlock_enabled", legacy_default))
+            timeout_enabled = st.checkbox("/timeout aktivieren", value=settings.get("server_tools_timeout_enabled", legacy_default))
+            untimeout_enabled = st.checkbox("/untimeout aktivieren", value=settings.get("server_tools_untimeout_enabled", legacy_default))
             st.info("Neue Befehle: /slowmode, /lock, /unlock, /timeout, /untimeout")
             if st.button("Server Tools speichern"):
-                settings["server_tools_enabled"] = tools_enabled
+                settings["server_tools_slowmode_enabled"] = slowmode_enabled
+                settings["server_tools_lock_enabled"] = lock_enabled
+                settings["server_tools_unlock_enabled"] = unlock_enabled
+                settings["server_tools_timeout_enabled"] = timeout_enabled
+                settings["server_tools_untimeout_enabled"] = untimeout_enabled
+                settings["server_tools_enabled"] = any([
+                    slowmode_enabled,
+                    lock_enabled,
+                    unlock_enabled,
+                    timeout_enabled,
+                    untimeout_enabled,
+                ])
                 save_settings(settings)
                 st.success("Server Tools gespeichert.")
 
@@ -1808,8 +1928,8 @@ else:
                 save_settings(settings)
                 st.success("Umfrage Embed gespeichert!")
 
-        elif page == "Moderation":
-            render_page_header("Moderation", "Sanktions-, Warn- und Log-Templates zentral verwalten.")
+        elif page == "Warns/Sanktionen":
+            render_page_header("Warns/Sanktionen", "Sanktions-, Warn- und Log-Templates zentral verwalten.")
             
             st.subheader("Sanktionen")
             moderation_enabled = st.checkbox("Moderation aktivieren", value=settings.get("management_enabled", True))
@@ -1828,7 +1948,7 @@ else:
             st.subheader("Logs")
             moderation_log_channel_id = select_channel_id("Moderation Log Channel", channels_map, settings.get("moderation_log_channel"), "moderation_log")
             
-            if st.button("Moderation speichern"):
+            if st.button("Warns/Sanktionen speichern"):
                 settings["management_enabled"] = moderation_enabled
                 settings["sanktion_role_id"] = sanktion_role_id
                 settings["sanktion_embed_title"] = sanktion_embed_title
@@ -1841,7 +1961,7 @@ else:
                 settings["warn_embed_footer"] = warn_embed_footer
                 settings["moderation_log_channel"] = moderation_log_channel_id
                 save_settings(settings)
-                st.success("Moderation gespeichert!")
+                st.success("Warns/Sanktionen gespeichert!")
 
         elif page == "Logging":
             render_page_header("Logging", "Aktiviere Logging und ordne den Ziel-Channel zu.")
@@ -1855,19 +1975,16 @@ else:
                 st.success("Logging gespeichert!")
 
         elif page == "Einstellungen":
-            render_page_header("Allgemeine Einstellungen", "Globale Basiswerte für Prefix und Kern-Module.")
+            render_page_header("Allgemeine Einstellungen", "Globale Basiswerte für Kern-Module.")
             active_server_label = st.session_state.get("active_server_label", settings.get("dashboard_server_name", "ASWARD Server"))
             active_server_key = st.session_state.get("active_server_key", "default")
             st.info(f"Aktiver Server-Kontext: {active_server_label}")
 
             st.subheader("Basis-Einstellungen")
             automod_enabled = st.checkbox("Automod global aktivieren", value=settings.get("automod_enabled", False))
-            st.subheader("Sonstige Einstellungen")
-            bot_prefix = st.text_input("Bot Prefix", value=settings.get("prefix", "!"))
             
             if st.button("Speichern"):
                 settings["automod_enabled"] = automod_enabled
-                settings["prefix"] = bot_prefix
                 save_settings(settings)
                 st.success("Einstellungen gespeichert!")
                 st.rerun()  # Seite neu laden, um Navigation zu aktualisieren
@@ -1890,6 +2007,154 @@ else:
                 st.write("Freigegebene IDs:")
                 st.code("\n".join(current_allowed_ids) if current_allowed_ids else "Keine weiteren Benutzer freigegeben.")
                 st.info("Nur die Owner-ID kann Dashboard-Benutzer je Server hinzufügen oder entfernen.")
+
+        elif page == "Custom Commands":
+            render_page_header("Custom Commands", "Lege Trigger fest und definiere, wie der Bot antwortet, inkl. optionalem Ziel-Channel.")
+
+            custom_enabled = st.checkbox("Custom Commands aktivieren", value=settings.get("commands_enabled", True))
+            custom_prefix = st.text_input(
+                "Prefix für Custom Commands",
+                value=str(settings.get("custom_commands_prefix", settings.get("prefix", "!")) or "!").strip() or "!",
+                help="Beispiel: Prefix '/' + Name 'meto' reagiert auf '/meto'.",
+            )
+
+            st.markdown("### Neuer Command")
+            cmd_name = st.text_input("Name (ohne Prefix)", key="custom_cmd_name_input", placeholder="meto")
+            cmd_action = st.selectbox(
+                "Aktion",
+                ["Nachricht senden"],
+                key="custom_cmd_action_select",
+            )
+            cmd_response = st.text_area(
+                "Antwort",
+                key="custom_cmd_response_input",
+                placeholder="Hallo {user}, willkommen in {channel} auf {server}.",
+            )
+            cmd_target_channel_id = select_channel_id(
+                "Ziel-Channel (optional)",
+                channels_map,
+                None,
+                "custom_cmd_new_target",
+            )
+            cmd_send_as_embed = st.checkbox("Als Embed senden", value=True, key="custom_cmd_embed_toggle")
+
+            if custom_prefix and cmd_name:
+                st.caption(f"Trigger-Vorschau: {custom_prefix}{cmd_name.strip()}")
+
+            add_col, save_col = st.columns(2)
+            with add_col:
+                if st.button("Command hinzufügen", use_container_width=True):
+                    normalized_name = cmd_name.strip()
+                    if not normalized_name:
+                        st.error("Bitte einen Command-Namen angeben.")
+                    elif not cmd_response.strip():
+                        st.error("Bitte eine Antwort eingeben.")
+                    elif cmd_action != "Nachricht senden":
+                        st.error("Diese Aktion wird aktuell nicht unterstützt.")
+                    else:
+                        commands_list = settings.get("custom_commands", []) if isinstance(settings.get("custom_commands"), list) else []
+                        if any(str(c.get("name", "")).strip().lower() == normalized_name.lower() for c in commands_list):
+                            st.error("Ein Command mit diesem Namen existiert bereits.")
+                        else:
+                            commands_list.append(
+                                {
+                                    "name": normalized_name,
+                                    "response": cmd_response,
+                                    "send_as_embed": bool(cmd_send_as_embed),
+                                    "target_channel_id": cmd_target_channel_id,
+                                    "allowed_roles": [],
+                                }
+                            )
+                            settings["custom_commands"] = commands_list
+                            settings["custom_commands_prefix"] = custom_prefix
+                            settings["commands_enabled"] = custom_enabled
+                            save_settings(settings)
+                            st.success("Custom Command hinzugefügt.")
+                            st.rerun()
+
+            with save_col:
+                if st.button("Prefix & Status speichern", use_container_width=True):
+                    settings["custom_commands_prefix"] = custom_prefix
+                    settings["commands_enabled"] = custom_enabled
+                    save_settings(settings)
+                    st.success("Custom Commands gespeichert.")
+
+            st.markdown("### Vorhandene Commands")
+            commands_list = settings.get("custom_commands", []) if isinstance(settings.get("custom_commands"), list) else []
+            if not commands_list:
+                st.info("Noch keine Custom Commands vorhanden.")
+            else:
+                for idx, cmd in enumerate(commands_list):
+                    name = str(cmd.get("name", "")).strip() or f"command_{idx + 1}"
+                    response = str(cmd.get("response", "")).strip()
+                    send_as_embed = bool(cmd.get("send_as_embed", True))
+                    target_channel_id = str(cmd.get("target_channel_id", "") or "").strip()
+                    target_channel_hint = f"Ziel-Channel ID: {target_channel_id}" if target_channel_id else "Ziel-Channel: aktueller Channel"
+                    st.markdown(
+                        f"<div class='ticket-panel-card'><div class='ticket-panel-head'><span>{custom_prefix}{name}</span>"
+                        f"<span class='pill-ok'>{'Embed' if send_as_embed else 'Text'}</span></div>"
+                        f"<div class='ticket-panel-meta'>Aktion: Nachricht senden</div>"
+                        f"<div class='ticket-panel-meta'>{target_channel_hint}</div>"
+                        f"<div class='ticket-panel-meta'>Antwort: {response[:140] if response else '-'}</div></div>",
+                        unsafe_allow_html=True,
+                    )
+                    col_a, col_b = st.columns([3, 2])
+                    with col_a:
+                        if st.button(f"Bearbeiten {custom_prefix}{name}", key=f"custom_cmd_edit_{idx}"):
+                            st.session_state[f"custom_cmd_edit_open_{idx}"] = True
+                    with col_b:
+                        st.checkbox("Zum Löschen markieren", key=f"custom_cmd_delete_{idx}")
+
+                    if st.session_state.get(f"custom_cmd_edit_open_{idx}", False):
+                        new_name = st.text_input("Name", value=name, key=f"custom_cmd_name_{idx}")
+                        new_response = st.text_area("Antwort", value=response, key=f"custom_cmd_response_{idx}")
+                        new_target_channel_id = select_channel_id(
+                            "Ziel-Channel (optional)",
+                            channels_map,
+                            target_channel_id,
+                            f"custom_cmd_target_{idx}",
+                        )
+                        new_embed = st.checkbox("Als Embed senden", value=send_as_embed, key=f"custom_cmd_embed_{idx}")
+                        save_edit_col, close_edit_col = st.columns(2)
+                        with save_edit_col:
+                            if st.button("Änderungen speichern", key=f"custom_cmd_save_{idx}", use_container_width=True):
+                                candidate = new_name.strip()
+                                if not candidate:
+                                    st.error("Name darf nicht leer sein.")
+                                elif any(
+                                    i != idx and str(c.get("name", "")).strip().lower() == candidate.lower()
+                                    for i, c in enumerate(commands_list)
+                                ):
+                                    st.error("Ein anderer Command mit diesem Namen existiert bereits.")
+                                elif not new_response.strip():
+                                    st.error("Antwort darf nicht leer sein.")
+                                else:
+                                    commands_list[idx]["name"] = candidate
+                                    commands_list[idx]["response"] = new_response
+                                    commands_list[idx]["send_as_embed"] = bool(new_embed)
+                                    commands_list[idx]["target_channel_id"] = new_target_channel_id
+                                    settings["custom_commands"] = commands_list
+                                    settings["custom_commands_prefix"] = custom_prefix
+                                    settings["commands_enabled"] = custom_enabled
+                                    save_settings(settings)
+                                    st.success("Custom Command aktualisiert.")
+                                    st.rerun()
+                        with close_edit_col:
+                            if st.button("Bearbeitung schließen", key=f"custom_cmd_close_{idx}", use_container_width=True):
+                                st.session_state[f"custom_cmd_edit_open_{idx}"] = False
+                                st.rerun()
+
+                if st.button("Markierte Commands löschen", type="secondary"):
+                    filtered = [
+                        cmd for i, cmd in enumerate(commands_list)
+                        if not st.session_state.get(f"custom_cmd_delete_{i}", False)
+                    ]
+                    settings["custom_commands"] = filtered
+                    settings["custom_commands_prefix"] = custom_prefix
+                    settings["commands_enabled"] = custom_enabled
+                    save_settings(settings)
+                    st.success("Markierte Custom Commands gelöscht.")
+                    st.rerun()
 
         elif page == "Embed Hub":
             render_page_header("Embed Hub", "Zentrale Konfiguration fuer alle wichtigen Embed-Vorlagen.")

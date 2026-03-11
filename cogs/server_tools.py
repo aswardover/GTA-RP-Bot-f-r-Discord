@@ -14,11 +14,16 @@ class ServerTools(commands.Cog):
         settings = self.bot.get_settings()
         return settings.get("server_tools_enabled", True)
 
+    def _tool_enabled(self, key: str):
+        settings = self.bot.get_settings()
+        legacy_default = settings.get("server_tools_enabled", True)
+        return settings.get(key, legacy_default)
+
     @app_commands.command(name="slowmode", description="Setzt Slowmode fuer einen Textkanal")
     @app_commands.describe(channel="Zielkanal", seconds="Sekunden (0-21600)")
     async def slowmode(self, interaction: discord.Interaction, channel: discord.TextChannel, seconds: int):
-        if not self._enabled():
-            await interaction.response.send_message(embed=error_embed("Server Tools sind deaktiviert."), ephemeral=True)
+        if not self._tool_enabled("server_tools_slowmode_enabled"):
+            await interaction.response.send_message(embed=error_embed("/slowmode ist deaktiviert."), ephemeral=True)
             return
         if not interaction.user.guild_permissions.manage_channels:
             await interaction.response.send_message(embed=error_embed("Keine Berechtigung (Manage Channels)."), ephemeral=True)
@@ -34,8 +39,8 @@ class ServerTools(commands.Cog):
     @app_commands.command(name="lock", description="Sperrt einen Textkanal fuer @everyone")
     @app_commands.describe(channel="Zielkanal")
     async def lock(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        if not self._enabled():
-            await interaction.response.send_message(embed=error_embed("Server Tools sind deaktiviert."), ephemeral=True)
+        if not self._tool_enabled("server_tools_lock_enabled"):
+            await interaction.response.send_message(embed=error_embed("/lock ist deaktiviert."), ephemeral=True)
             return
         if not interaction.user.guild_permissions.manage_channels:
             await interaction.response.send_message(embed=error_embed("Keine Berechtigung (Manage Channels)."), ephemeral=True)
@@ -49,8 +54,8 @@ class ServerTools(commands.Cog):
     @app_commands.command(name="unlock", description="Entsperrt einen Textkanal fuer @everyone")
     @app_commands.describe(channel="Zielkanal")
     async def unlock(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        if not self._enabled():
-            await interaction.response.send_message(embed=error_embed("Server Tools sind deaktiviert."), ephemeral=True)
+        if not self._tool_enabled("server_tools_unlock_enabled"):
+            await interaction.response.send_message(embed=error_embed("/unlock ist deaktiviert."), ephemeral=True)
             return
         if not interaction.user.guild_permissions.manage_channels:
             await interaction.response.send_message(embed=error_embed("Keine Berechtigung (Manage Channels)."), ephemeral=True)
@@ -64,8 +69,8 @@ class ServerTools(commands.Cog):
     @app_commands.command(name="timeout", description="Setzt ein Timeout fuer ein Mitglied")
     @app_commands.describe(member="Mitglied", minutes="Dauer in Minuten", reason="Grund")
     async def timeout_member(self, interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str = "Kein Grund"):
-        if not self._enabled():
-            await interaction.response.send_message(embed=error_embed("Server Tools sind deaktiviert."), ephemeral=True)
+        if not self._tool_enabled("server_tools_timeout_enabled"):
+            await interaction.response.send_message(embed=error_embed("/timeout ist deaktiviert."), ephemeral=True)
             return
         if not interaction.user.guild_permissions.moderate_members:
             await interaction.response.send_message(embed=error_embed("Keine Berechtigung (Moderate Members)."), ephemeral=True)
@@ -83,8 +88,8 @@ class ServerTools(commands.Cog):
     @app_commands.command(name="untimeout", description="Entfernt ein Timeout von einem Mitglied")
     @app_commands.describe(member="Mitglied", reason="Grund")
     async def untimeout_member(self, interaction: discord.Interaction, member: discord.Member, reason: str = "Kein Grund"):
-        if not self._enabled():
-            await interaction.response.send_message(embed=error_embed("Server Tools sind deaktiviert."), ephemeral=True)
+        if not self._tool_enabled("server_tools_untimeout_enabled"):
+            await interaction.response.send_message(embed=error_embed("/untimeout ist deaktiviert."), ephemeral=True)
             return
         if not interaction.user.guild_permissions.moderate_members:
             await interaction.response.send_message(embed=error_embed("Keine Berechtigung (Moderate Members)."), ephemeral=True)

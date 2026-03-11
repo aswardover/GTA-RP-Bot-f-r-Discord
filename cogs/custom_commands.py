@@ -1,17 +1,13 @@
 # -*- coding: utf-8 -*-
 import json
 import os
-import threading
 from typing import Dict, Any, List
 import discord
-from discord import app_commands
 from discord.ext import commands
 import config
 from embeds import create_embed
 
-GUILD_ID = config.GUILD_ID
 SETTINGS_FILE = "settings.json"
-settings_lock = threading.Lock()
 
 def load_settings() -> Dict[str, Any]:
     if not os.path.exists(SETTINGS_FILE):
@@ -23,51 +19,34 @@ class CustomCommands(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.text_commands: Dict[str, Dict[str, Any]] = {}
-        self.register_custom_commands()
 
-    def register_custom_commands(self):
-        settings = load_settings()
+    def _build_text_commands(self, settings: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        built: Dict[str, Dict[str, Any]] = {}
+        if not settings.get("commands_enabled", True):
+            return built
+
+        default_prefix = str(settings.get("custom_commands_prefix", settings.get("prefix", "!")) or "!").strip() or "!"
         custom_commands: List[Dict[str, Any]] = settings.get("custom_commands", [])
-        to_remove = []
-        for cmd in self.bot.tree.get_commands():
-            if isinstance(cmd, app_commands.Command) and getattr(cmd.callback, "__custom_cmd__", False):
-                to_remove.append(cmd)
-        guild_obj = discord.Object(id=GUILD_ID)
-        for cmd in to_remove:
-            try:
-                self.bot.tree.remove_command(cmd.name, guild=guild_obj)
-            except Exception:
-                pass
-        self.text_commands.clear()
+        if not isinstance(custom_commands, list):
+            return built
+
         for cmd_def in custom_commands:
-            name = cmd_def.get("name")
-            prefix = cmd_def.get("prefix", "!").strip()
-            response = cmd_def.get("response", "")
-            allowed_roles = cmd_def.get("allowed_roles", [])
+            name = str(cmd_def.get("name", "")).strip()
             if not name:
                 continue
-            if prefix == "/":
-                async def slash_callback(
-                    interaction: discord.Interaction,
-                    _response=response,
-                    _allowed_roles=allowed_roles
-                ):
-                    if _allowed_roles:
-                        if not interaction.user.guild_permissions.administrator:
-                            user_role_ids = [r.id for r in interaction.user.roles]
-                            if not any(rid in user_role_ids for rid in _allowed_roles):
-                                await interaction.response.send_message("\u274c Du hast keine Berechtigung.", ephemeral=True)
-                                return
-                    text = format_placeholders(_response, user=interaction.user, guild=interaction.guild, channel=interaction.channel)
-                    embed = create_embed(description=text, color=config.COLOR_INFO)
-                    await interaction.response.send_message(embed=embed, ephemeral=False)
-                slash_callback.__custom_cmd__ = True
-                command = app_commands.Command(name=name, description=f"Custom Command: {name}", callback=slash_callback)
-                command.guild_ids = [GUILD_ID]
-                self.bot.tree.add_command(command)
-            else:
-                key = f"{prefix}{name}"
-                self.text_commands[key] = {"response": response, "allowed_roles": allowed_roles}
+            response = str(cmd_def.get("response", ""))
+            allowed_roles = cmd_def.get("allowed_roles", []) if isinstance(cmd_def.get("allowed_roles"), list) else []
+            send_as_embed = bool(cmd_def.get("send_as_embed", True))
+            target_channel_id = str(cmd_def.get("target_channel_id", "") or "").strip()
+            cmd_prefix = str(cmd_def.get("prefix", default_prefix) or default_prefix).strip() or default_prefix
+            key = f"{cmd_prefix}{name}".lower()
+            built[key] = {
+                "response": response,
+                "allowed_roles": allowed_roles,
+                "send_as_embed": send_as_embed,
+                "target_channel_id": target_channel_id,
+            }
+        return built
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -76,20 +55,37 @@ class CustomCommands(commands.Cog):
         content = message.content.strip()
         if not content:
             return
-        cmd_def = self.text_commands.get(content)
+        settings = load_settings()
+        self.text_commands = self._build_text_commands(settings)
+        cmd_def = self.text_commands.get(content.lower())
         if not cmd_def:
             return
         allowed_roles = cmd_def.get("allowed_roles", [])
         response = cmd_def.get("response", "")
+        send_as_embed = bool(cmd_def.get("send_as_embed", True))
+        target_channel_id = str(cmd_def.get("target_channel_id", "") or "").strip()
         if allowed_roles:
             if not message.author.guild_permissions.administrator:
                 user_role_ids = [r.id for r in message.author.roles]
                 if not any(rid in user_role_ids for rid in allowed_roles):
                     await message.channel.send(f"{message.author.mention} \u274c Keine Berechtigung.")
                     return
-        text = format_placeholders(response, user=message.author, guild=message.guild, channel=message.channel)
-        embed = create_embed(description=text, color=config.COLOR_INFO)
-        await message.channel.send(embed=embed)
+        target_channel = message.channel
+        if target_channel_id:
+            try:
+                parsed_channel_id = int(target_channel_id)
+                resolved_channel = message.guild.get_channel(parsed_channel_id)
+                if resolved_channel is not None:
+                    target_channel = resolved_channel
+            except (ValueError, TypeError):
+                pass
+
+        text = format_placeholders(response, user=message.author, guild=message.guild, channel=target_channel)
+        if send_as_embed:
+            embed = create_embed(description=text, color=config.COLOR_INFO)
+            await target_channel.send(embed=embed)
+        else:
+            await target_channel.send(text)
 
 def format_placeholders(text: str, user, guild, channel) -> str:
     replacements = {
