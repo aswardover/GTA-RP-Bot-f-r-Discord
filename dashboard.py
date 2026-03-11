@@ -1694,11 +1694,6 @@ else:
                     save_btn = st.button("Speichern")
                     publish_btn = st.button("Veröffentlichen")
 
-                st.session_state.tickets_confirm_delete = st.checkbox(
-                    "Panel wirklich löschen",
-                    value=st.session_state.get("tickets_confirm_delete", False),
-                    key="tickets_confirm_delete_checkbox",
-                )
                 delete_btn = st.button("Panel jetzt löschen", type="secondary")
 
                 with st.expander("Allgemein", expanded=True):
@@ -1804,18 +1799,17 @@ else:
                     st.session_state.tickets_confirm_leave = False
 
                 if back_btn or discard_btn:
-                    if has_unsaved_changes and not st.session_state.tickets_confirm_leave:
+                    override = discard_btn
+                    if has_unsaved_changes and not st.session_state.tickets_confirm_leave and not override:
                         st.error("Bitte bestätige zuerst das Verwerfen ungespeicherter Änderungen.")
                         st.stop()
                     st.session_state.pop("tickets_editor_snapshot", None)
                     st.session_state.tickets_confirm_leave = False
                     st.session_state.tickets_editor_open = False
+                    st.toast("Änderungen verworfen." if discard_btn else "Zurück zur Übersicht.")
                     st.rerun()
 
                 if delete_btn:
-                    if not st.session_state.tickets_confirm_delete:
-                        st.error("Bitte bestätige zuerst 'Panel wirklich löschen'.")
-                        st.stop()
                     settings["ticket_panels"] = []
                     settings["tickets_enabled"] = False
                     settings["ticket_channel_id"] = ""
@@ -1839,7 +1833,7 @@ else:
                     st.session_state.tickets_confirm_leave = False
                     st.session_state.tickets_confirm_delete = False
                     st.session_state.tickets_editor_open = False
-                    st.success("Ticket-Panel wurde gelöscht.")
+                    st.toast("Ticket-Panel wurde gelöscht.")
                     st.rerun()
 
                 if save_btn or publish_btn:
@@ -1873,7 +1867,8 @@ else:
                     save_settings(settings)
                     st.session_state.tickets_editor_snapshot = deepcopy(panel)
                     st.session_state.tickets_confirm_leave = False
-                    st.success("Ticket-Panel gespeichert." if save_btn else "Ticket-Panel gespeichert und wird veröffentlicht.")
+                    st.toast("Ticket-Panel gespeichert." if save_btn else "Ticket-Panel gespeichert und wird veröffentlicht.")
+                    st.rerun()
 
         elif page == "Stempeluhr":
             render_page_header("Stempeluhr System", "Übersicht und strukturierter Editor für Rollen und Panel-Verwaltung.")
@@ -2065,12 +2060,14 @@ else:
                     st.session_state.stempeluhr_confirm_leave = False
 
                 if back_btn or discard_btn:
-                    if has_unsaved_changes and not st.session_state.stempeluhr_confirm_leave:
+                    override = discard_btn
+                    if has_unsaved_changes and not st.session_state.stempeluhr_confirm_leave and not override:
                         st.error("Bitte bestätige zuerst das Verwerfen ungespeicherter Änderungen.")
                         st.stop()
                     st.session_state.pop("stempeluhr_editor_snapshot", None)
                     st.session_state.stempeluhr_confirm_leave = False
                     st.session_state.stempeluhr_editor_open = False
+                    st.toast("Änderungen verworfen." if discard_btn else "Zurück zur Übersicht.")
                     st.rerun()
 
                 if save_btn or publish_btn:
@@ -2092,7 +2089,8 @@ else:
                     save_settings(settings)
                     st.session_state.stempeluhr_editor_snapshot = deepcopy(panel)
                     st.session_state.stempeluhr_confirm_leave = False
-                    st.success("Stempeluhr gespeichert." if save_btn else "Stempeluhr gespeichert und Panel wird veröffentlicht.")
+                    st.toast("Stempeluhr gespeichert." if save_btn else "Stempeluhr gespeichert und Panel wird veröffentlicht.")
+                    st.rerun()
 
         elif page == "Automod":
             render_page_header("Automod", "Schütze den Server mit Spam-, Caps- und Wortfiltern.")
