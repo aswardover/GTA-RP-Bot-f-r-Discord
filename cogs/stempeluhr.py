@@ -98,7 +98,6 @@ class StempelView(discord.ui.View):
             title,
             f"{action_text}\\n\\n🗓️ **{format_time(now)} UTC**"
         )
-        embed.set_footer(text="GTA-RP Zeiterfassung")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ─── COG ───────────────────────────────────────────────────────
@@ -217,7 +216,6 @@ class Stempeluhr(commands.Cog):
                 inline=False
             )
         
-        embed.set_footer(text="GTA-RP Zeiterfassung")
         await interaction.response.send_message(embed=embed, ephemeral=True)
     
     @stempel.command(name="liste", description="Alle Stempelzeiten anzeigen (Admin)")
@@ -267,9 +265,7 @@ class Stempeluhr(commands.Cog):
             )
         
         if len(data) > 10:
-            embed.set_footer(text=f"Zeige 10 von {len(data)} Mitarbeitern | GTA-RP Zeiterfassung")
-        else:
-            embed.set_footer(text="GTA-RP Zeiterfassung")
+            embed.set_footer(text=f"Zeige 10 von {len(data)} Mitarbeitern")
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 

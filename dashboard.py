@@ -341,8 +341,8 @@ def names_for_ids(mapping, id_list):
     reverse_map = {str(v): k for k, v in mapping.items()}
     return [reverse_map[str(item)] for item in (id_list or []) if str(item) in reverse_map]
 
-def select_role_id(label, roles_mapping, current_value, key_prefix):
-    """Returns a role ID string from dropdown plus manual fallback input."""
+def select_role_id(label, roles_mapping, current_value, key_prefix, allow_manual_input=True):
+    """Returns a role ID string from dropdown options."""
     role_names = list(roles_mapping.keys())
     current_str = str(current_value).strip() if current_value is not None else ""
     selected_id = current_str or None
@@ -358,15 +358,19 @@ def select_role_id(label, roles_mapping, current_value, key_prefix):
         if selected_name:
             selected_id = str(roles_mapping.get(selected_name))
     else:
-        st.info("Keine Rollen-Daten verfuegbar. Nutze die Rollen-ID als Fallback.")
+        message = "Keine Rollen-Daten verfuegbar. Bitte zuerst Discord-Daten synchronisieren."
+        if allow_manual_input:
+            message = "Keine Rollen-Daten verfuegbar. Nutze die Rollen-ID als Eingabe."
+        st.info(message)
 
-    manual_id = st.text_input(
-        f"{label} ID (Fallback)",
-        value=selected_id or "",
-        key=f"{key_prefix}_manual_id",
-    ).strip()
-    if manual_id:
-        return manual_id
+    if allow_manual_input:
+        manual_id = st.text_input(
+            f"{label} ID",
+            value=selected_id or "",
+            key=f"{key_prefix}_manual_id",
+        ).strip()
+        if manual_id:
+            return manual_id
     return selected_id
 
 def render_page_header(title, subtitle):
@@ -380,7 +384,7 @@ def embed_config_block(settings, key_prefix, title_default, desc_default, color_
     footer = st.text_input("Footer", value=settings.get(f"{key_prefix}_footer", footer_default), key=f"{key_prefix}_footer_input")
     return title, description, color, footer
 
-def select_channel_id(label, channels_mapping, current_value, key_prefix):
+def select_channel_id(label, channels_mapping, current_value, key_prefix, allow_manual_input=True):
     """Returns a channel ID string from dropdown options."""
     channel_names = list(channels_mapping.keys())
     current_str = str(current_value).strip() if current_value is not None else ""
@@ -397,19 +401,23 @@ def select_channel_id(label, channels_mapping, current_value, key_prefix):
         if selected_name:
             selected_id = str(channels_mapping.get(selected_name))
     else:
-        st.warning("Keine Channel-Daten verfuegbar. Nutze unten die Fallback-ID oder synchronisiere Discord-Daten.")
+        message = "Keine Kanaele verfuegbar. Bitte zuerst Discord-Daten synchronisieren."
+        if allow_manual_input:
+            message = "Keine Kanaele verfuegbar. Nutze unten die Channel-ID oder synchronisiere Discord-Daten."
+        st.warning(message)
 
-    manual_id = st.text_input(
-        f"{label} ID (Fallback)",
-        value=selected_id or "",
-        key=f"{key_prefix}_manual_id",
-    ).strip()
-    if manual_id:
-        return manual_id
+    if allow_manual_input:
+        manual_id = st.text_input(
+            f"{label} ID",
+            value=selected_id or "",
+            key=f"{key_prefix}_manual_id",
+        ).strip()
+        if manual_id:
+            return manual_id
     return selected_id
 
-def select_category_id(label, categories_mapping, current_value, key_prefix):
-    """Returns a category ID string from dropdown options with manual fallback."""
+def select_category_id(label, categories_mapping, current_value, key_prefix, allow_manual_input=True):
+    """Returns a category ID string from dropdown options."""
     category_names = list(categories_mapping.keys())
     current_str = str(current_value).strip() if current_value is not None else ""
     selected_id = current_str or None
@@ -425,15 +433,19 @@ def select_category_id(label, categories_mapping, current_value, key_prefix):
         if selected_name:
             selected_id = str(categories_mapping.get(selected_name))
     else:
-        st.warning("Keine Kategorien verfuegbar. Nutze die Fallback-ID.")
+        message = "Keine Kategorien verfuegbar. Bitte zuerst Discord-Daten synchronisieren."
+        if allow_manual_input:
+            message = "Keine Kategorien verfuegbar. Nutze die Kategorie-ID als Eingabe."
+        st.warning(message)
 
-    manual_id = st.text_input(
-        f"{label} ID (Fallback)",
-        value=selected_id or "",
-        key=f"{key_prefix}_manual_id",
-    ).strip()
-    if manual_id:
-        return manual_id
+    if allow_manual_input:
+        manual_id = st.text_input(
+            f"{label} ID",
+            value=selected_id or "",
+            key=f"{key_prefix}_manual_id",
+        ).strip()
+        if manual_id:
+            return manual_id
     return selected_id
 
 # --- OAUTH2 HILFSFUNKTIONEN ---
@@ -559,6 +571,7 @@ else:
             [
                 "ticket_channel_id",
                 "tickets_panel_channel_id",
+                "tickets_transcript_channel_id",
                 "stempeluhr_panel_channel_id",
                 "announce_channel_id",
                 "automod_log_channel",
@@ -569,7 +582,17 @@ else:
         )
         roles_map = normalize_named_mapping(discord_data.get("roles", {}))
         categories_map = normalize_named_mapping(discord_data.get("categories", {}))
-        categories_map = add_ids_from_settings(categories_map, settings, ["ticket_category_id"], "Kategorie")
+        categories_map = add_ids_from_settings(
+            categories_map,
+            settings,
+            [
+                "ticket_category_id",
+                "tickets_open_category_id",
+                "tickets_claimed_category_id",
+                "tickets_closed_category_id",
+            ],
+            "Kategorie",
+        )
         categories_map = add_ticket_categories_from_settings(categories_map, settings)
         
         # Navigation immer vollständig anzeigen; Aktivierung erfolgt im jeweiligen Reiter.
@@ -629,10 +652,11 @@ else:
 
             st.subheader("Allgemein")
             panel_channel_id = select_channel_id(
-                "Kanal veroeffentlichen",
+                "Panel-Kanal fuer das Ticket-Menue",
                 channels_map,
                 settings.get("tickets_panel_channel_id", settings.get("ticket_channel_id", "")),
                 "tickets_panel",
+                allow_manual_input=False,
             )
             panel_mode = st.radio(
                 "Panel-Modus",
@@ -649,22 +673,15 @@ else:
             st.subheader("Ticket Manager-Rollen")
             manager_defaults = names_for_ids(roles_map, settings.get("tickets_manager_roles", []))
             manager_role_names = st.multiselect("Rollen mit Zugriff auf Claim/Close", options=list(roles_map.keys()), default=manager_defaults)
-            manager_role_ids_manual = parse_id_list(
-                st.text_input(
-                    "Manager Rollen IDs (Fallback, komma-separiert)",
-                    value=", ".join([str(x) for x in settings.get("tickets_manager_roles", [])]),
-                    key="tickets_manager_roles_manual",
-                )
-            )
 
             st.subheader("Kategorien fuer Ticket-Status")
-            open_category_id = select_category_id("Kategorie fuer erstellte Tickets", categories_map, settings.get("tickets_open_category_id"), "tickets_open_category")
-            claimed_category_id = select_category_id("Kategorie fuer beanspruchte Tickets", categories_map, settings.get("tickets_claimed_category_id"), "tickets_claimed_category")
-            closed_category_id = select_category_id("Kategorie fuer geschlossene Tickets", categories_map, settings.get("tickets_closed_category_id"), "tickets_closed_category")
+            open_category_id = select_category_id("Kategorie fuer neue Tickets", categories_map, settings.get("tickets_open_category_id"), "tickets_open_category", allow_manual_input=False)
+            claimed_category_id = select_category_id("Kategorie fuer uebernommene Tickets", categories_map, settings.get("tickets_claimed_category_id"), "tickets_claimed_category", allow_manual_input=False)
+            closed_category_id = select_category_id("Kategorie fuer geschlossene Tickets", categories_map, settings.get("tickets_closed_category_id"), "tickets_closed_category", allow_manual_input=False)
             delete_on_close = st.checkbox("Ticket-Kanal nach Schliessen loeschen", value=settings.get("tickets_delete_on_close", True))
 
             st.subheader("Ticket-Transkripte")
-            transcript_channel_id = select_channel_id("Transkript-Kanal", channels_map, settings.get("tickets_transcript_channel_id"), "tickets_transcript_channel")
+            transcript_channel_id = select_channel_id("Kanal fuer Ticket-Transkripte", channels_map, settings.get("tickets_transcript_channel_id"), "tickets_transcript_channel", allow_manual_input=False)
             transcript_dm_enabled = st.checkbox(
                 "Transcript-Link/Datei privat an Ticket-Ersteller senden",
                 value=settings.get("tickets_transcript_dm_enabled", False),
@@ -682,8 +699,8 @@ else:
                 opt_emoji = st.text_input("Emoji", value=str(base.get("emoji", "📩")), key=f"ticket_option_emoji_{idx}")
                 opt_name = st.text_input("Etikett", value=str(base.get("name", f"Ticket {idx + 1}")), key=f"ticket_option_name_{idx}")
                 opt_desc = st.text_input("Beschreibung", value=str(base.get("description", "Unser Team kann dir helfen!")), key=f"ticket_option_desc_{idx}")
-                opt_cat_id = select_category_id("Kategorie fuer diese Option", categories_map, base.get("category_channel_id"), f"ticket_option_category_{idx}")
-                opt_auto_role = select_role_id("Auto-Rolle (optional)", roles_map, base.get("auto_role_id"), f"ticket_option_auto_role_{idx}")
+                opt_cat_id = select_category_id("Kategorie fuer diese Ticket-Option", categories_map, base.get("category_channel_id"), f"ticket_option_category_{idx}", allow_manual_input=False)
+                opt_auto_role = select_role_id("Auto-Rolle (optional)", roles_map, base.get("auto_role_id"), f"ticket_option_auto_role_{idx}", allow_manual_input=False)
                 built_options.append(
                     {
                         "emoji": opt_emoji,
@@ -703,7 +720,7 @@ else:
                 settings["tickets_panel_description"] = panel_description
                 settings["tickets_categories"] = built_options
                 resolved_manager_roles = [str(roles_map[name]) for name in manager_role_names]
-                settings["tickets_manager_roles"] = manager_role_ids_manual or resolved_manager_roles
+                settings["tickets_manager_roles"] = resolved_manager_roles
                 settings["tickets_open_category_id"] = int(open_category_id) if (open_category_id and str(open_category_id).isdigit()) else open_category_id
                 settings["tickets_claimed_category_id"] = int(claimed_category_id) if (claimed_category_id and str(claimed_category_id).isdigit()) else claimed_category_id
                 settings["tickets_closed_category_id"] = int(closed_category_id) if (closed_category_id and str(closed_category_id).isdigit()) else closed_category_id

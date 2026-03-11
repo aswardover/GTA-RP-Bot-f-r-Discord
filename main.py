@@ -124,7 +124,6 @@ class MyBot(commands.Bot):
                                 description='Klicke auf **Einstempeln** wenn du mit der Arbeit beginnst und auf **Ausstempeln** wenn du aufhoerst.',
                                 color=0x22c55e
                             )
-                            embed.set_footer(text='GTA RP Zeiterfassungs-System')
                             from cogs.stempeluhr import StempelView
                             view = StempelView()
                             await channel.send(embed=embed, view=view)
@@ -149,7 +148,6 @@ class MyBot(commands.Bot):
                                     description=message,
                                     color=0xf59e0b
                                 )
-                                embed.set_footer(text='GTA RP Ankuendigung')
                                 await channel.send(embed=embed)
                                 logger.info(f'Ankuendigung in #{channel.name} gepostet.')
                 except Exception as e:
