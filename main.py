@@ -6,6 +6,8 @@ import json
 import logging
 import asyncio
 import datetime
+
+from dotenv import load_dotenv
 from config import TOKEN, SETTINGS_FILE
 from embeds import success_embed, error_embed
 from collections import defaultdict
@@ -216,7 +218,7 @@ class MyBot(commands.Bot):
         await self.wait_until_ready()
 
 bot = MyBot()
-
+load_dotenv()
 if __name__ == "__main__":
     token = (TOKEN or "").strip()
     if not token or token.startswith("YOUR_") or token.lower().startswith("dummy"):

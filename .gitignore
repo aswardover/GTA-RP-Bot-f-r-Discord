@@ -2,3 +2,7 @@ __pycache__
 .DS_Store
 *.pyc
 .venv
+.env
+bot_data.db
+bot_runtime.json
+discord_data.json
