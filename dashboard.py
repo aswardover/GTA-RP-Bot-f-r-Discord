@@ -1608,6 +1608,9 @@ else:
                         st.session_state.tickets_editor_snapshot = deepcopy(ticket_panels[st.session_state.tickets_selected_index])
                         st.session_state.tickets_confirm_leave = False
                         st.session_state.tickets_editor_open = True
+                        
+                        settings["ticket_panels"] = ticket_panels
+                        save_settings(settings)
                         st.rerun()
                     delete_from_overview = st.button("Markierte löschen", type="secondary")
 
