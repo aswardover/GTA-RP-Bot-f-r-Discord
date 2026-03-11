@@ -157,17 +157,31 @@ st.markdown("""
         padding-top: 1rem;
     }
     .stButton > button {
-        background: linear-gradient(90deg, var(--as-accent-2), var(--as-accent));
-        color: #ffffff;
-        border-radius: 10px;
-        border: 0;
+        background: linear-gradient(90deg, var(--as-accent-2), var(--as-accent)) !important;
+        color: #ffffff !important;
+        border-radius: 10px !important;
+        border: 0 !important;
         padding: 0.48rem 0.95rem;
         font-weight: 700;
         letter-spacing: 0.02em;
     }
     .stButton > button:hover {
-        filter: brightness(1.08);
-        transform: translateY(-1px);
+        filter: brightness(1.08) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
+    }
+    /* Fix for white/secondary buttons to be dark/transparent */
+    .stButton > button[kind="secondary"],
+    .stButton > button[data-testid="stBaseButton-secondary"] {
+        background: rgba(255,255,255,0.06) !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+        color: #e2e8f0 !important;
+    }
+    .stButton > button[kind="secondary"]:hover,
+    .stButton > button[data-testid="stBaseButton-secondary"]:hover {
+        background: rgba(255,255,255,0.12) !important;
+        border-color: rgba(255,255,255,0.25) !important;
+        color: #ffffff !important;
     }
     .stTextInput input,
     .stTextArea textarea,
@@ -1140,6 +1154,9 @@ def render_embed_designer(settings, key_prefix, title_default, desc_default, col
     with ec2:
         # The input value defaults to the picker's current state (which updates on picker change)
         color = st.text_input("Embed Farbe (Hex)", value=picked, key=input_key, on_change=on_text_change)
+    
+    footer = st.text_input("Embed Footer", value=settings.get(f"{key_prefix}_footer", footer_default), key=f"{key_prefix}_footer_input")
+    
     _render_placeholder_registry(context_key)
     _render_embed_preview(title, _preview_text(description, "#preview"), _preview_text(footer, "#preview"))
     return title, description, color, footer
@@ -2749,8 +2766,7 @@ else:
                     key="rr_panel_allowed_roles",
                 )
                 panel_allowed_roles = [str(roles_map[name]) for name in panel_allowed_names if name in roles_map]
-                st.caption("Vorschau")
-                st.code(f"Titel: {title}\nBeschreibung: {_preview_text(description, '#reaktion-kanal')}", language="text")
+                _render_embed_preview(title, _preview_text(description, "#reaktion-kanal"), "(Kein Footer konfiguriert)")
 
                 if back_btn or discard_btn:
                     st.session_state.reaction_roles_editor_open = False
