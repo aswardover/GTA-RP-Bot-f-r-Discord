@@ -1417,58 +1417,180 @@ else:
                     st.success("Ticket-Panel gespeichert." if save_btn else "Ticket-Panel gespeichert und wird veroeffentlicht.")
 
         elif page == "Stempeluhr":
-            render_page_header("Stempeluhr System", "Berechtigungen und Panel-Channel für die Zeit-Erfassung.")
-            stempeluhr_enabled = st.checkbox("Stempeluhr aktivieren", value=settings.get("stempeluhr_enabled", False))
-            
-            role_names = list(roles_map.keys())
-            
-            st.subheader("Berechtigungen")
-            
-            # Multi-Select für Rollen
-            default_ein_names = names_for_ids(roles_map, settings.get("stempel_ein_roles", []))
-            default_aus_names = names_for_ids(roles_map, settings.get("stempel_aus_roles", []))
-            selected_ein_roles = st.multiselect("Wer darf /stempel_ein nutzen?", options=role_names, default=default_ein_names)
-            selected_aus_roles = st.multiselect("Wer darf /stempel_aus nutzen?", options=role_names, default=default_aus_names)
+            render_page_header("Stempeluhr System", "Uebersicht und strukturierter Editor fuer Rollen und Panel-Verwaltung.")
 
-            manual_ein_ids = parse_id_list(
-                st.text_input(
-                    "Rollen-IDs fuer /stempel_ein (Fallback, komma-separiert)",
-                    value=", ".join([str(x) for x in settings.get("stempel_ein_roles", [])]),
-                    key="stempel_ein_roles_manual",
-                )
-            )
-            manual_aus_ids = parse_id_list(
-                st.text_input(
-                    "Rollen-IDs fuer /stempel_aus (Fallback, komma-separiert)",
-                    value=", ".join([str(x) for x in settings.get("stempel_aus_roles", [])]),
-                    key="stempel_aus_roles_manual",
-                )
-            )
+            if "stempeluhr_editor_open" not in st.session_state:
+                st.session_state.stempeluhr_editor_open = False
 
-            current_panel_channel = settings.get("stempeluhr_panel_channel_id", "")
-            panel_channel_id = select_channel_id("Stempeluhr Panel Channel", channels_map, current_panel_channel, "stempeluhr_panel")
-            
-            if st.button("Stempel-Berechtigungen speichern"):
-                settings["stempeluhr_enabled"] = stempeluhr_enabled
+            stempel_panels = settings.get("stempeluhr_panels") if isinstance(settings.get("stempeluhr_panels"), list) else []
+            if not stempel_panels:
+                stempel_panels = [
+                    {
+                        "name": settings.get("stempeluhr_panel_name", "Stempeluhr Panel"),
+                        "enabled": settings.get("stempeluhr_enabled", False),
+                        "panel_channel_id": settings.get("stempeluhr_panel_channel_id", ""),
+                        "ein_roles": settings.get("stempel_ein_roles", []),
+                        "aus_roles": settings.get("stempel_aus_roles", []),
+                    }
+                ]
+
+            if not st.session_state.stempeluhr_editor_open:
+                top_col, toggle_col = st.columns([10, 2])
+                with top_col:
+                    st.markdown("### Deine Stempeluhr-Panels")
+                with toggle_col:
+                    stempel_active = st.checkbox(
+                        "Aktiv",
+                        value=bool(stempel_panels and stempel_panels[0].get("enabled", False)),
+                        key="stempeluhr_active_toggle",
+                    )
+                    stempel_panels[0]["enabled"] = stempel_active
+
+                stat_left, stat_right = st.columns([7, 3])
+                with stat_left:
+                    st.caption("Nur berechtigte Rollen koennen Ein-/Ausstempeln verwenden.")
+                with stat_right:
+                    st.markdown("<div style='text-align:right;'>1 / 1</div>", unsafe_allow_html=True)
+
+                list_col, action_col = st.columns([8, 2])
+                with action_col:
+                    if st.button("+ Panel bearbeiten", key="stempeluhr_open_editor"):
+                        st.session_state.stempeluhr_editor_snapshot = deepcopy(stempel_panels[0])
+                        st.session_state.stempeluhr_confirm_leave = False
+                        st.session_state.stempeluhr_editor_open = True
+                        st.rerun()
+
+                with list_col:
+                    panel = stempel_panels[0]
+                    channel_id_preview = panel.get("panel_channel_id") or "-"
+                    status_text = "Veroeffentlicht" if panel.get("enabled", False) else "Entwurf"
+                    ein_count = len(panel.get("ein_roles", []) or [])
+                    aus_count = len(panel.get("aus_roles", []) or [])
+                    st.markdown(
+                        f"<div class='ticket-panel-card'><div class='ticket-panel-head'><span>{panel.get('name', 'Stempeluhr Panel')}</span>"
+                        f"<span class='pill-ok'>{status_text}</span></div><div class='ticket-panel-meta'>Kanal-ID: {channel_id_preview}</div>"
+                        f"<div class='ticket-panel-meta'>/stempel_ein Rollen: {ein_count} | /stempel_aus Rollen: {aus_count}</div></div>",
+                        unsafe_allow_html=True,
+                    )
+
+                st.subheader("Befehle")
+                st.markdown("<div class='ticket-command-row'>/stempel_ein - Schicht starten</div>", unsafe_allow_html=True)
+                st.markdown("<div class='ticket-command-row'>/stempel_aus - Schicht beenden</div>", unsafe_allow_html=True)
+
+                settings["stempeluhr_panels"] = stempel_panels
+                settings["stempeluhr_enabled"] = stempel_panels[0].get("enabled", False)
+                save_settings(settings)
+
+            else:
+                panel = stempel_panels[0]
+                if "stempeluhr_editor_snapshot" not in st.session_state:
+                    st.session_state.stempeluhr_editor_snapshot = deepcopy(panel)
+                if "stempeluhr_confirm_leave" not in st.session_state:
+                    st.session_state.stempeluhr_confirm_leave = False
+
+                back_col, title_col, action_col = st.columns([1, 7, 4])
+                with back_col:
+                    back_btn = st.button("<", key="stempeluhr_back")
+                with title_col:
+                    panel_name = st.text_input("Panelname", value=panel.get("name", "Stempeluhr Panel"), key="stempeluhr_panel_name_input")
+                with action_col:
+                    discard_btn = st.button("Verwerfen", key="stempeluhr_discard")
+                    save_btn = st.button("Speichern", key="stempeluhr_save")
+                    publish_btn = st.button("Veroeffentlichen", key="stempeluhr_publish")
+
+                with st.expander("Allgemein", expanded=True):
+                    stempeluhr_enabled = st.checkbox("Stempeluhr aktivieren", value=panel.get("enabled", False), key="stempeluhr_editor_enabled")
+                    panel_channel_id = select_channel_id(
+                        "Stempeluhr Panel Channel",
+                        channels_map,
+                        panel.get("panel_channel_id", ""),
+                        "stempeluhr_editor_panel_channel",
+                    )
+
+                with st.expander("Berechtigungen", expanded=True):
+                    role_names = list(roles_map.keys())
+                    default_ein_names = names_for_ids(roles_map, panel.get("ein_roles", []))
+                    default_aus_names = names_for_ids(roles_map, panel.get("aus_roles", []))
+                    selected_ein_roles = st.multiselect(
+                        "Wer darf /stempel_ein nutzen?",
+                        options=role_names,
+                        default=default_ein_names,
+                        key="stempeluhr_editor_ein_roles",
+                    )
+                    selected_aus_roles = st.multiselect(
+                        "Wer darf /stempel_aus nutzen?",
+                        options=role_names,
+                        default=default_aus_names,
+                        key="stempeluhr_editor_aus_roles",
+                    )
+                    manual_ein_ids = parse_id_list(
+                        st.text_input(
+                            "Rollen-IDs fuer /stempel_ein (Fallback, komma-separiert)",
+                            value=", ".join([str(x) for x in panel.get("ein_roles", [])]),
+                            key="stempeluhr_editor_ein_roles_manual",
+                        )
+                    )
+                    manual_aus_ids = parse_id_list(
+                        st.text_input(
+                            "Rollen-IDs fuer /stempel_aus (Fallback, komma-separiert)",
+                            value=", ".join([str(x) for x in panel.get("aus_roles", [])]),
+                            key="stempeluhr_editor_aus_roles_manual",
+                        )
+                    )
+
                 resolved_ein = [str(roles_map[r]) for r in selected_ein_roles]
                 resolved_aus = [str(roles_map[r]) for r in selected_aus_roles]
                 final_ein = manual_ein_ids or resolved_ein
                 final_aus = manual_aus_ids or resolved_aus
-                settings["stempel_ein_roles"] = final_ein
-                settings["stempel_aus_roles"] = final_aus
-                # Backward/forward compatibility with cog keys.
-                settings["stempeluhr_allowed_roles"] = list(dict.fromkeys(final_ein + final_aus))
-                settings["stempeluhr_admin_roles"] = list(dict.fromkeys(final_aus))
-                settings["stempeluhr_panel_channel_id"] = panel_channel_id
-                save_settings(settings)
-                st.success("Stempel-Berechtigungen wurden aktualisiert!")
 
-            if st.button("Stempeluhr Panel veröffentlichen"):
-                settings["stempeluhr_enabled"] = stempeluhr_enabled
-                settings["stempeluhr_panel_channel_id"] = panel_channel_id or settings.get("stempeluhr_panel_channel_id")
-                settings["stempeluhr_publish_trigger"] = True
-                save_settings(settings)
-                st.success("Stempeluhr Panel wird veröffentlicht.")
+                draft_panel = {
+                    "name": panel_name,
+                    "enabled": bool(stempeluhr_enabled),
+                    "panel_channel_id": panel_channel_id,
+                    "ein_roles": final_ein,
+                    "aus_roles": final_aus,
+                }
+
+                has_unsaved_changes = draft_panel != st.session_state.stempeluhr_editor_snapshot
+                if has_unsaved_changes:
+                    st.warning("Es gibt ungespeicherte Aenderungen.")
+                    st.session_state.stempeluhr_confirm_leave = st.checkbox(
+                        "Ungespeicherte Aenderungen beim Verlassen verwerfen",
+                        value=st.session_state.stempeluhr_confirm_leave,
+                        key="stempeluhr_confirm_leave_checkbox",
+                    )
+                else:
+                    st.session_state.stempeluhr_confirm_leave = False
+
+                if back_btn or discard_btn:
+                    if has_unsaved_changes and not st.session_state.stempeluhr_confirm_leave:
+                        st.error("Bitte bestaetige zuerst das Verwerfen ungespeicherter Aenderungen.")
+                        st.stop()
+                    st.session_state.pop("stempeluhr_editor_snapshot", None)
+                    st.session_state.stempeluhr_confirm_leave = False
+                    st.session_state.stempeluhr_editor_open = False
+                    st.rerun()
+
+                if save_btn or publish_btn:
+                    panel.update(draft_panel)
+                    stempel_panels[0] = panel
+                    settings["stempeluhr_panels"] = stempel_panels
+
+                    settings["stempeluhr_enabled"] = panel.get("enabled", False)
+                    settings["stempel_ein_roles"] = final_ein
+                    settings["stempel_aus_roles"] = final_aus
+                    settings["stempeluhr_allowed_roles"] = list(dict.fromkeys(final_ein + final_aus))
+                    settings["stempeluhr_admin_roles"] = list(dict.fromkeys(final_aus))
+                    settings["stempeluhr_panel_channel_id"] = panel_channel_id
+                    settings["stempeluhr_panel_name"] = panel_name
+
+                    if publish_btn:
+                        settings["stempeluhr_publish_trigger"] = True
+
+                    save_settings(settings)
+                    st.session_state.stempeluhr_editor_snapshot = deepcopy(panel)
+                    st.session_state.stempeluhr_confirm_leave = False
+                    st.success("Stempeluhr gespeichert." if save_btn else "Stempeluhr gespeichert und Panel wird veroeffentlicht.")
 
         elif page == "Automod":
             render_page_header("Automod", "Schütze den Server mit Spam-, Caps- und Wortfiltern.")
