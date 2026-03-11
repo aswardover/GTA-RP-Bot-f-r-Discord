@@ -1,60 +1,82 @@
 # -*- coding: utf-8 -*-
-# Dieser Cog exportiert beim Bot-Start alle Kanaele und Rollen
+# Dieser Cog exportiert regelmäßig beim Bot-Start alle Kanaele und Rollen
 # in discord_data.json damit das Dashboard Dropdowns anzeigen kann.
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import json
 import os
 import datetime
+import asyncio
 
 DATA_FILE = "discord_data.json"
 
 class DataExporter(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self._data_changed = False
+        self.export_task.start()
+
+    def cog_unload(self):
+        self.export_task.cancel()
+
+    @tasks.loop(seconds=5.0)
+    async def export_task(self):
+        if self._data_changed:
+            await self.export_data()
+            self._data_changed = False
+
+    @export_task.before_loop
+    async def before_export_task(self):
+        await self.bot.wait_until_ready()
+        # Initiale Exporterung
+        await self.export_data()
 
     @commands.Cog.listener()
     async def on_ready(self):
-        await self.export_data()
+        self._data_changed = True
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel):
-        await self.export_data()
+        self._data_changed = True
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel):
-        await self.export_data()
+        self._data_changed = True
 
     @commands.Cog.listener()
     async def on_guild_role_create(self, role):
-        await self.export_data()
+        self._data_changed = True
 
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role):
-        await self.export_data()
+        self._data_changed = True
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
-        await self.export_data()
+        self._data_changed = True
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):
-        await self.export_data()
+        self._data_changed = True
 
     @commands.Cog.listener()
     async def on_presence_update(self, before, after):
-        await self.export_data()
+        # Nur Update triggers wenn sich Status wirklich ändert
+        if before.status != after.status:
+            self._data_changed = True
 
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
-        await self.export_data()
+        # Ignoriere reine Zeit-Updates oder kleine Änderungen die das Dashboard nicht kümmern
+        if before.display_name != after.display_name or before.roles != after.roles:
+            self._data_changed = True
 
     async def export_data(self):
         data = {"channels": [], "roles": [], "categories": [], "guilds": [], "meta": {}}
         for guild in self.bot.guilds:
             online_count = 0
             try:
-                online_count = sum(1 for m in guild.members if not m.bot and getattr(m, "status", discord.Status.offline) != discord.Status.offline)
+                online_count = sum(1 for m in guild.members if not m.bot and str(m.status) != "offline")
             except Exception:
                 online_count = 0
 
@@ -63,7 +85,7 @@ class DataExporter(commands.Cog):
                 for member in guild.members:
                     if member.bot:
                         continue
-                    member_status = str(getattr(member, "status", discord.Status.offline))
+                    member_status = str(member.status)
                     members.append(
                         {
                             "id": str(member.id),

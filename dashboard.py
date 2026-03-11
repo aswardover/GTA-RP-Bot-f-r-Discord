@@ -504,25 +504,52 @@ def _render_member_copy_list(members):
                 border: 1px solid rgba(34,197,94,0.3);
                 display: none;
                 font-size: 0.82rem;
+                text-align: center;
+                animation: fadeInOut 2s ease-in-out;
+            }}
+            @keyframes fadeInOut {{
+                0% {{ opacity: 0; }}
+                10% {{ opacity: 1; }}
+                90% {{ opacity: 1; }}
+                100% {{ opacity: 0; }}
             }}
         </style>
         <script>
             (function() {{
-                const root = document.currentScript.parentElement;
+                const root = document.currentScript ? document.currentScript.parentElement : document.body;
                 const toast = root.querySelector('#copy-toast');
-                root.querySelectorAll('.member-copy-btn').forEach((btn) => {{
+                if (!toast) return;
+
+                const btns = root.querySelectorAll('.member-copy-btn');
+                btns.forEach((btn) => {{
                     btn.addEventListener('click', async () => {{
                         const userId = btn.getAttribute('data-user-id') || '';
                         if (!userId) return;
+                        
+                        // Fallback copy method
                         try {{
-                            await navigator.clipboard.writeText(userId);
-                            toast.textContent = 'NutzerID kopiert';
+                            if (navigator.clipboard) {{
+                                await navigator.clipboard.writeText(userId);
+                            }} else {{
+                                const textArea = document.createElement("textarea");
+                                textArea.value = userId;
+                                document.body.appendChild(textArea);
+                                textArea.select();
+                                document.execCommand("copy");
+                                document.body.removeChild(textArea);
+                            }}
+                            toast.textContent = 'Nutzer ID kopiert';
                             toast.style.display = 'block';
-                            setTimeout(() => {{ toast.style.display = 'none'; }}, 1200);
+                            toast.style.background = 'rgba(34,197,94,0.15)';
+                            toast.style.color = '#86efac';
+                            setTimeout(() => {{ toast.style.display = 'none'; }}, 2000);
                         }} catch (e) {{
-                            toast.textContent = 'Kopieren fehlgeschlagen';
+                            console.error(e);
+                            toast.textContent = 'Fehler beim Kopieren';
                             toast.style.display = 'block';
-                            setTimeout(() => {{ toast.style.display = 'none'; }}, 1500);
+                            toast.style.background = 'rgba(239, 68, 68, 0.15)';
+                            toast.style.color = '#fca5a5';
+                            setTimeout(() => {{ toast.style.display = 'none'; }}, 2000);
                         }}
                     }});
                 }});
@@ -557,11 +584,19 @@ def save_reaction_roles(data):
 def _safe_read_json(path, fallback):
     if not os.path.exists(path):
         return deepcopy(fallback)
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception:
-        return deepcopy(fallback)
+    
+    # Simple retry mechanism for file locking/concurrency issues
+    import time
+    for i in range(3):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError, IOError):
+            if i < 2:
+                time.sleep(0.1)
+                continue
+            return deepcopy(fallback)
+    return deepcopy(fallback)
 
 def _append_audit_entry(module, action, details=None, status="ok"):
     entries = _safe_read_json(AUDIT_LOG_FILE, [])
@@ -1057,18 +1092,40 @@ def _render_embed_preview(title, description, footer):
 
 def render_embed_designer(settings, key_prefix, title_default, desc_default, color_default, footer_default, context_key):
     st.subheader("Embed-Baukasten")
+    
+    # Init default inputs
     title = st.text_input("Embed Titel", value=settings.get(f"{key_prefix}_title", title_default), key=f"{key_prefix}_title_input")
     description = st.text_area("Embed Beschreibung", value=settings.get(f"{key_prefix}_description", desc_default), key=f"{key_prefix}_desc_input")
     
-    current_color = settings.get(f"{key_prefix}_color", color_default)
-    picker_default = current_color if isinstance(current_color, str) and current_color.startswith("#") and len(current_color) == 7 else "#2b2d42"
+    # Sync Logic for Color Picker <-> Hex Input
+    current_setting = settings.get(f"{key_prefix}_color", color_default)
+    picker_key = f"{key_prefix}_picker"
+    input_key = f"{key_prefix}_color_input"
+    
+    # Ensure session state has values if not set
+    if picker_key not in st.session_state:
+        st.session_state[picker_key] = current_setting if isinstance(current_setting, str) and current_setting.startswith("#") and len(current_setting) == 7 else "#2b2d42"
+    
+    def on_picker_change():
+        # Update text input logic is handled by 'value=st.session_state[picker_key]' on rerun
+        pass
+
+    def on_text_change():
+        # Update picker if valid hex
+        val = st.session_state[input_key]
+        if val.startswith("#") and len(val) == 7:
+            try:
+                int(val[1:], 16)
+                st.session_state[picker_key] = val
+            except ValueError:
+                pass
+
     ec1, ec2 = st.columns([1, 5])
     with ec1:
-        picked = st.color_picker("Farbe", value=picker_default, key=f"{key_prefix}_picker")
+        picked = st.color_picker("Farbe", key=picker_key, on_change=on_picker_change)
     with ec2:
-        color = st.text_input("Embed Farbe (Hex)", value=picked, key=f"{key_prefix}_color_input")
-
-    footer = st.text_input("Embed Footer", value=settings.get(f"{key_prefix}_footer", footer_default), key=f"{key_prefix}_footer_input")
+        # The input value defaults to the picker's current state (which updates on picker change)
+        color = st.text_input("Embed Farbe (Hex)", value=picked, key=input_key, on_change=on_text_change)
     _render_placeholder_registry(context_key)
     _render_embed_preview(title, _preview_text(description, "#preview"), _preview_text(footer, "#preview"))
     return title, description, color, footer
@@ -2154,16 +2211,25 @@ else:
         elif page == "Automod":
             render_page_header("Automod", "Schütze den Server mit Spam-, Caps- und Wortfiltern.")
             
-            automod_enabled = st.checkbox("Automod aktivieren", value=settings.get("automod_enabled", False))
-            banned_words = st.text_area("Verbotene Wörter (kommasepariert)", value=", ".join(settings.get("automod_banned_words", [])))
-            spam_threshold = st.number_input("Spam-Schwellenwert", value=settings.get("automod_spam_threshold", 5), min_value=1)
-            spam_timeframe = st.number_input("Spam-Zeitfenster (Sekunden)", value=settings.get("automod_spam_timeframe", 10), min_value=1)
-            caps_threshold = st.slider("Caps-Schwellenwert", 0.0, 1.0, value=settings.get("automod_caps_threshold", 0.7))
+            automod_enabled = st.toggle("Automod aktivieren", value=settings.get("automod_enabled", False))
+            if automod_enabled:
+                st.caption("Auto-Moderation ist aktiv.")
+            
+            with st.expander("Filter & Schwellenwerte", expanded=True):
+                banned_words = st.text_area("Verbotene Wörter (kommasepariert)", value=", ".join(settings.get("automod_banned_words", [])))
+                spam_threshold = st.number_input("Spam-Schwellenwert", value=settings.get("automod_spam_threshold", 5), min_value=1)
+                spam_timeframe = st.number_input("Spam-Zeitfenster (Sekunden)", value=settings.get("automod_spam_timeframe", 10), min_value=1)
+                caps_threshold = st.slider("Caps-Schwellenwert", 0.0, 1.0, value=settings.get("automod_caps_threshold", 0.7))
+            
             action = st.selectbox("Aktion bei Verstoß", ["delete", "warn", "mute", "ban"], index=["delete", "warn", "mute", "ban"].index(settings.get("automod_action", "delete")))
             
-            caps_enabled = st.checkbox("Caps-Lock Filter aktivieren", value=settings.get("automod_caps_enabled", True))
-            block_links = st.checkbox("Links blockieren", value=settings.get("automod_block_links", False))
-            block_invites = st.checkbox("Discord-Einladungslinks blockieren", value=settings.get("automod_block_invites", False))
+            st.subheader("Zusätzliche Filter")
+            col1, col2 = st.columns(2)
+            with col1:
+                caps_enabled = st.toggle("Caps-Lock Filter", value=settings.get("automod_caps_enabled", True))
+                block_links = st.toggle("Links blockieren", value=settings.get("automod_block_links", False))
+            with col2:
+                block_invites = st.toggle("Invite-Links blockieren", value=settings.get("automod_block_invites", False))
 
             log_channel_id = select_channel_id("Log-Channel", channels_map, settings.get("automod_log_channel"), "automod_log")
             
@@ -2187,12 +2253,21 @@ else:
         elif page == "Server Tools":
             render_page_header("Server Tools", "Moderationstools für den RP-Alltag: Slowmode, Lock/Unlock, Timeout.")
             legacy_default = settings.get("server_tools_enabled", True)
-            slowmode_enabled = st.checkbox("/slowmode aktivieren", value=settings.get("server_tools_slowmode_enabled", legacy_default))
-            lock_enabled = st.checkbox("/lock aktivieren", value=settings.get("server_tools_lock_enabled", legacy_default))
-            unlock_enabled = st.checkbox("/unlock aktivieren", value=settings.get("server_tools_unlock_enabled", legacy_default))
-            timeout_enabled = st.checkbox("/timeout aktivieren", value=settings.get("server_tools_timeout_enabled", legacy_default))
-            untimeout_enabled = st.checkbox("/untimeout aktivieren", value=settings.get("server_tools_untimeout_enabled", legacy_default))
-            server_tools_send_as_embed = st.checkbox("Antworten als Embed senden", value=settings.get("server_tools_send_as_embed", True))
+            
+            st.subheader("Befehle")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                slowmode_enabled = st.toggle("/slowmode", value=settings.get("server_tools_slowmode_enabled", legacy_default))
+                timeout_enabled = st.toggle("/timeout", value=settings.get("server_tools_timeout_enabled", legacy_default))
+            with col2:
+                lock_enabled = st.toggle("/lock", value=settings.get("server_tools_lock_enabled", legacy_default))
+                untimeout_enabled = st.toggle("/untimeout", value=settings.get("server_tools_untimeout_enabled", legacy_default))
+            with col3:
+                unlock_enabled = st.toggle("/unlock", value=settings.get("server_tools_unlock_enabled", legacy_default))
+
+            st.subheader("Optionen")
+            server_tools_send_as_embed = st.toggle("Antworten als Embed senden", value=settings.get("server_tools_send_as_embed", True))
+
             if st.button("Server Tools speichern"):
                 settings["server_tools_slowmode_enabled"] = slowmode_enabled
                 settings["server_tools_lock_enabled"] = lock_enabled
@@ -2216,7 +2291,7 @@ else:
             custom_rules = settings.get("custom_rules", []) if isinstance(settings.get("custom_rules"), list) else []
             custom_rules = [_normalize_if_rule(r) for r in custom_rules]
             settings["custom_rules"] = custom_rules
-            custom_enabled = st.checkbox("Wenn-Funktionen aktivieren", value=settings.get("custom_rules_enabled", False))
+            custom_enabled = st.toggle("Wenn-Funktionen aktivieren", value=settings.get("custom_rules_enabled", False))
             ifrules_scope_role_names = st.multiselect(
                 "Regeln nur für Mitglieder mit diesen Rollen (optional)",
                 options=list(roles_map.keys()),
@@ -2324,8 +2399,9 @@ else:
                 with title_col:
                     st.markdown(f"### Regel {selected_idx + 1} bearbeiten")
                 with action_col:
-                    discard_btn = st.button("Verwerfen", key="ifrules_discard")
-                    save_btn = st.button("Speichern", key="ifrules_save")
+                    c1, c2 = st.columns(2)
+                    with c1: discard_btn = st.button("Verwerfen", key="ifrules_discard")
+                    with c2: save_btn = st.button("Speichern", key="ifrules_save")
 
                 event = st.selectbox(
                     "Event",
@@ -2351,7 +2427,7 @@ else:
                     key="ifrules_message",
                     placeholder="Verwende {user} und {server}",
                 )
-                send_as_embed = st.checkbox("Als Embed senden", value=bool(rule.get("send_as_embed", False)), key="ifrules_send_as_embed")
+                send_as_embed = st.toggle("Als Embed senden", value=bool(rule.get("send_as_embed", False)), key="ifrules_send_as_embed")
                 allowed_role_names = st.multiselect(
                     "Nur ausführen, wenn Mitglied eine dieser Rollen hat (optional)",
                     options=list(roles_map.keys()),
@@ -2395,8 +2471,12 @@ else:
 
         elif page == "Giveaway":
             render_page_header("Gewinnspiel", "Passe das Gewinnspiel-Embed im gewohnten Stil an.")
-            giveaway_enabled = st.checkbox("Gewinnspiel aktivieren", value=settings.get("giveaway_enabled", False))
-            giveaway_send_as_embed = st.checkbox("Nachrichten als Embed senden", value=settings.get("giveaway_send_as_embed", True))
+            col1, col2 = st.columns(2)
+            with col1:
+                giveaway_enabled = st.toggle("Gewinnspiel aktivieren", value=settings.get("giveaway_enabled", False))
+            with col2:
+                giveaway_send_as_embed = st.toggle("Nachrichten als Embed senden", value=settings.get("giveaway_send_as_embed", True))
+
             giveaway_embed_title, giveaway_embed_description, giveaway_embed_color, giveaway_embed_footer = render_embed_designer(
                 settings,
                 "giveaway_embed",
@@ -2419,11 +2499,15 @@ else:
 
         elif page == "Ankündigungen":
             render_page_header("Ankündigungen", "Steuere Channel, Embed-Layout und Publishing für Ankündigungen.")
-            announce_enabled = st.checkbox("Ankündigungen aktivieren", value=settings.get("announce_enabled", True))
-            current_announce_channel = settings.get("announce_channel_id", "")
-            announce_channel_id = select_channel_id("Ankündigungs-Channel", channels_map, current_announce_channel, "announce_channel")
+            col1, col2 = st.columns(2)
+            with col1:
+                announce_enabled = st.toggle("Ankündigungen aktivieren", value=settings.get("announce_enabled", True))
             
-            announce_embed_enabled = st.checkbox("Als Embed senden", value=settings.get("announce_embed_enabled", False))
+            with col2:
+                current_announce_channel = settings.get("announce_channel_id", "")
+                announce_channel_id = select_channel_id("Ankündigungs-Channel", channels_map, current_announce_channel, "announce_channel")
+            
+            announce_embed_enabled = st.toggle("Als Embed senden", value=settings.get("announce_embed_enabled", False))
             if announce_embed_enabled:
                 announce_embed_title, announce_embed_description, announce_embed_color, announce_embed_footer = render_embed_designer(
                     settings,
@@ -2435,33 +2519,44 @@ else:
                     "announce",
                 )
                 
-                if st.button("Ankündigung Embed speichern"):
-                    settings["announce_enabled"] = announce_enabled
-                    settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
-                    settings["announce_embed_title"] = announce_embed_title
-                    settings["announce_embed_description"] = announce_embed_description
-                    settings["announce_embed_color"] = announce_embed_color
-                    settings["announce_embed_footer"] = announce_embed_footer
-                    save_settings(settings)
-                    st.success("Ankündigung Embed gespeichert!")
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Ankündigung Embed speichern"):
+                        settings["announce_enabled"] = announce_enabled
+                        settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
+                        settings["announce_embed_title"] = announce_embed_title
+                        settings["announce_embed_description"] = announce_embed_description
+                        settings["announce_embed_color"] = announce_embed_color
+                        settings["announce_embed_footer"] = announce_embed_footer
+                        save_settings(settings)
+                        st.toast("Ankündigung Embed gespeichert!")
+                with c2:
+                     if st.button("Ankündigung veröffentlichen"):
+                        settings["announce_enabled"] = announce_enabled
+                        settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
+                        settings["announce_publish_trigger"] = True
+                        save_settings(settings)
+                        st.toast("Ankündigung wird veröffentlicht.")
             else:
-                if st.button("Einstellung speichern"):
-                    settings["announce_enabled"] = announce_enabled
-                    settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
-                    settings["announce_embed_enabled"] = announce_embed_enabled
-                    save_settings(settings)
-                    st.success("Gespeichert!")
-
-            if st.button("Ankündigung veröffentlichen"):
-                settings["announce_enabled"] = announce_enabled
-                settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
-                settings["announce_publish_trigger"] = True
-                save_settings(settings)
-                st.success("Ankündigung wird veröffentlicht.")
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Einstellung speichern"):
+                        settings["announce_enabled"] = announce_enabled
+                        settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
+                        settings["announce_embed_enabled"] = announce_embed_enabled
+                        save_settings(settings)
+                        st.toast("Gespeichert!")
+                with c2:
+                    if st.button("Ankündigung veröffentlichen"):
+                        settings["announce_enabled"] = announce_enabled
+                        settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
+                        settings["announce_publish_trigger"] = True
+                        save_settings(settings)
+                        st.toast("Ankündigung wird veröffentlicht.")
 
         elif page == "Reaction Roles":
             render_page_header("Reaktionsrollen", "Lege Rollen-Panels mit Emoji-Zuordnung einfach fest.")
-            reaction_roles_enabled = st.checkbox("Reaktionsrollen aktivieren", value=settings.get("reaction_roles_enabled", False))
+            reaction_roles_enabled = st.toggle("Reaktionsrollen aktivieren", value=settings.get("reaction_roles_enabled", False))
             rr_data = load_reaction_roles()
 
             rr_panels = settings.get("reaction_role_panels", []) if isinstance(settings.get("reaction_role_panels"), list) else []
@@ -2605,11 +2700,15 @@ else:
                 with title_col:
                     panel_name = st.text_input("Panelname", value=panel.get("name", f"Reaktionsrollen Panel {selected_idx + 1}"), key="rr_panel_name")
                 with action_col:
-                    discard_btn = st.button("Verwerfen", key="rr_discard")
-                    save_btn = st.button("Speichern", key="rr_save")
-                    publish_btn = st.button("Veröffentlichen", key="rr_publish")
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        discard_btn = st.button("Verwerfen", key="rr_discard")
+                    with c2:
+                        save_btn = st.button("Speichern", key="rr_save")
+                    with c3:
+                        publish_btn = st.button("Veröffentlichen", key="rr_publish")
 
-                rr_enabled = st.checkbox("Panel aktivieren", value=panel.get("enabled", False), key="rr_enabled")
+                rr_enabled = st.toggle("Panel aktivieren", value=panel.get("enabled", False), key="rr_enabled")
                 rr_channel_id = select_channel_id("Kanal", channels_map, panel.get("channel_id", ""), "rr_channel")
                 title = st.text_input("Embed Titel", value=panel.get("title", "Wähle deine Rollen"), key="rr_title")
                 description = st.text_area("Embed Beschreibung", value=panel.get("description", "Reagiere mit Emojis um Rollen zu bekommen."), key="rr_description")
@@ -2622,7 +2721,7 @@ else:
                 with ec2:
                     color = st.text_input("Embed Farbe (Hex)", value=picked, key="rr_color")
 
-                rr_send_as_embed = st.checkbox("Panel als Embed senden", value=bool(panel.get("send_as_embed", True)), key="rr_send_as_embed")
+                rr_send_as_embed = st.toggle("Panel als Embed senden", value=bool(panel.get("send_as_embed", True)), key="rr_send_as_embed")
 
                 st.subheader("Rollen zuweisen")
                 emoji1 = st.text_input("Emoji 1", value=str(item1.get("emoji", "🔴")), key="rr_emoji1")
@@ -2660,6 +2759,7 @@ else:
                             "color": color,
                             "send_as_embed": bool(rr_send_as_embed),
                             "items": items_built,
+
                             "allowed_roles": panel_allowed_roles,
                         }
                     )
@@ -2702,8 +2802,8 @@ else:
 
         elif page == "Umfragen":
             render_page_header("Umfragen", "Definiere Titel, Farbe und Footer für Poll-Embeds.")
-            polls_enabled = st.checkbox("Umfragen aktivieren", value=settings.get("polls_enabled", False))
-            poll_send_as_embed = st.checkbox("Nachrichten als Embed senden", value=settings.get("poll_send_as_embed", True))
+            polls_enabled = st.toggle("Umfragen aktivieren", value=settings.get("polls_enabled", False))
+            poll_send_as_embed = st.toggle("Nachrichten als Embed senden", value=settings.get("poll_send_as_embed", True))
             poll_embed_title, poll_embed_description, poll_embed_color, poll_embed_footer = render_embed_designer(
                 settings,
                 "poll_embed",
@@ -2728,7 +2828,7 @@ else:
             render_page_header("Warns/Sanktionen", "Sanktions-, Warn- und Log-Templates zentral verwalten.")
             
             st.subheader("Sanktionen")
-            moderation_enabled = st.checkbox("Moderation aktivieren", value=settings.get("management_enabled", True))
+            moderation_enabled = st.toggle("Moderation aktivieren", value=settings.get("management_enabled", True))
             sanktion_role_id = select_role_id("Sanktions-Rolle", roles_map, settings.get("sanktion_role_id"), "moderation_sanktion_role")
             sanktion_embed_title, sanktion_embed_description, sanktion_embed_color, sanktion_embed_footer = render_embed_designer(
                 settings,
@@ -2739,7 +2839,7 @@ else:
                 "Sanktion erteilt",
                 "sanktion",
             )
-            sanktion_send_as_embed = st.checkbox("Sanktions-Nachricht als Embed senden", value=settings.get("sanktion_send_as_embed", True))
+            sanktion_send_as_embed = st.toggle("Sanktions-Nachricht als Embed senden", value=settings.get("sanktion_send_as_embed", True))
             
             st.subheader("Warnungen")
             warn_embed_title, warn_embed_description, warn_embed_color, warn_embed_footer = render_embed_designer(
@@ -2751,7 +2851,7 @@ else:
                 "Warnung erteilt",
                 "warn",
             )
-            warn_send_as_embed = st.checkbox("Warn-Nachricht als Embed senden", value=settings.get("warn_send_as_embed", True))
+            warn_send_as_embed = st.toggle("Warn-Nachricht als Embed senden", value=settings.get("warn_send_as_embed", True))
             
             st.subheader("Logs")
             moderation_log_channel_id = select_channel_id("Moderations-Log-Kanal", channels_map, settings.get("moderation_log_channel"), "moderation_log")
@@ -2775,7 +2875,7 @@ else:
 
         elif page == "Logging":
             render_page_header("Protokolle", "Aktiviere Logs und wähle den Ziel-Kanal.")
-            logging_enabled = st.checkbox("Protokolle aktivieren", value=settings.get("logging_enabled", True))
+            logging_enabled = st.toggle("Protokolle aktivieren", value=settings.get("logging_enabled", True))
             logging_channel_id = select_channel_id("Log-Kanal", channels_map, settings.get("logging_channel_id"), "logging_channel")
             
             if st.button("Protokolle speichern"):
@@ -2791,7 +2891,7 @@ else:
             st.info(f"Aktiver Server-Kontext: {active_server_label}")
 
             st.subheader("Basis-Einstellungen")
-            automod_enabled = st.checkbox("Automod global aktivieren", value=settings.get("automod_enabled", False))
+            automod_enabled = st.toggle("Automod global aktivieren", value=settings.get("automod_enabled", False))
             
             if st.button("Speichern"):
                 settings["automod_enabled"] = automod_enabled
@@ -2821,7 +2921,7 @@ else:
         elif page == "Audit-Logs":
             render_page_header("Audit-Logs", "Status, Änderungen und Aktionen pro Server nachvollziehen.")
             current_server_key = st.session_state.get("active_server_key", "default")
-            only_current_server = st.checkbox("Nur aktuellen Server anzeigen", value=True)
+            only_current_server = st.toggle("Nur aktuellen Server anzeigen", value=True)
             max_rows = st.slider("Einträge", min_value=20, max_value=300, value=120, step=20)
             entries = _read_audit_entries(current_server_key if only_current_server else None, max_rows)
 
@@ -2857,7 +2957,7 @@ else:
         elif page == "Custom Commands":
             render_page_header("Eigene Befehle", "Lege Trigger fest und definiere, wie der Bot antwortet, inkl. optionalem Ziel-Kanal.")
 
-            custom_enabled = st.checkbox("Eigene Befehle aktivieren", value=settings.get("commands_enabled", True))
+            custom_enabled = st.toggle("Eigene Befehle aktivieren", value=settings.get("commands_enabled", True))
             custom_prefix = st.text_input(
                 "Prefix für eigene Befehle",
                 value=str(settings.get("custom_commands_prefix", settings.get("prefix", "!")) or "!").strip() or "!",
@@ -2903,8 +3003,14 @@ else:
                         st.session_state.custom_selected_index = len(commands_list) - 1
                         st.session_state.custom_editor_open = True
                         st.rerun()
-                    delete_marked = st.button("Markierte löschen", key="custom_delete_marked", type="secondary")
-                    if st.button("Prefix & Status speichern", key="custom_save_status", use_container_width=True):
+                    
+                    c_act1, c_act2 = st.columns(2)
+                    with c_act1:
+                        delete_marked = st.button("Löschen", key="custom_delete_marked", type="secondary", help="Markierte löschen")
+                    with c_act2:
+                         save_status = st.button("Speichern", key="custom_save_status", use_container_width=True, help="Prefix & Status speichern")
+
+                    if save_status:
                         settings["custom_commands_prefix"] = custom_prefix
                         settings["commands_enabled"] = custom_enabled
                         settings["custom_commands_manager_roles"] = custom_manager_roles
@@ -2978,8 +3084,11 @@ else:
                 with title_col:
                     st.markdown(f"### Befehl {selected_idx + 1} bearbeiten")
                 with action_col:
-                    discard_btn = st.button("Verwerfen", key="custom_discard")
-                    save_btn = st.button("Speichern", key="custom_save")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        discard_btn = st.button("Verwerfen", key="custom_discard")
+                    with c2:
+                        save_btn = st.button("Speichern", key="custom_save")
 
                 new_name = st.text_input("Name (ohne Prefix)", value=str(cmd.get("name", "")).strip(), key="custom_name")
                 new_response = st.text_area("Antwort", value=str(cmd.get("response", "")), key="custom_response")
@@ -2989,7 +3098,7 @@ else:
                     cmd.get("target_channel_id", ""),
                     "custom_target",
                 )
-                new_embed = st.checkbox("Als Embed senden", value=bool(cmd.get("send_as_embed", True)), key="custom_embed")
+                new_embed = st.toggle("Als Embed senden", value=bool(cmd.get("send_as_embed", True)), key="custom_embed")
                 allowed_role_names = st.multiselect(
                     "Nur diese Rollen dürfen diesen Befehl ausführen (optional)",
                     options=list(roles_map.keys()),

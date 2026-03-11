@@ -56,9 +56,11 @@ class StempelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🕒 Ein-/Ausstempeln", style=discord.ButtonStyle.green, custom_id="stempel_toggle_btn")
+    @discord.ui.button(label="Ein-/Ausstempeln", style=discord.ButtonStyle.success, emoji="🕒", custom_id="stempel_toggle_btn")
     async def btn_toggle(self, interaction: discord.Interaction, button: discord.ui.Button):
         settings = load_settings()
+        project_name = settings.get("dashboard_server_name", "ASWARD Server")
+        
         if not has_stempel_role(interaction.user, settings, "stempeluhr_allowed_roles"):
             embed = error_embed("🚫 Keine Berechtigung", "Du hast keine Berechtigung zum Stempeln.")
             await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -66,13 +68,17 @@ class StempelView(discord.ui.View):
 
         data = load_data()
         uid = str(interaction.user.id)
-
         now = datetime.now(timezone.utc)
+        
+        # User image for footer icon (optional, using general logic)
+        user_avatar = interaction.user.display_avatar.url
 
         if uid not in data:
             data[uid] = {"name": str(interaction.user), "sessions": [], "eingestempelt": None, "last_reminder_sent": None}
 
         current_start = data[uid].get("eingestempelt")
+        footer_text = f"🏥 LSMD | {project_name} • {now.strftime('%d.%m.%Y um %H:%M Uhr')}"
+        
         if current_start:
             start = datetime.fromisoformat(current_start)
             hours, minutes = calc_duration(start, now)
@@ -84,20 +90,25 @@ class StempelView(discord.ui.View):
             data[uid].setdefault("sessions", []).append(session)
             data[uid]["eingestempelt"] = None
             data[uid]["last_reminder_sent"] = None
-            action_text = f"Du hast dich erfolgreich abgemeldet. Du warst **{hours}h {minutes}m** im Dienst."
-            title = "✅ Ausgestempelt"
+            
+            embed = discord.Embed(
+                title=f"{project_name} | Stempeluhr",
+                description=f"Du hast dich erfolgreich abgemeldet. Du warst **{hours} Minuten** im Dienst.",
+                color=0xef4444
+            )
+            embed.set_footer(text=footer_text, icon_url=user_avatar)
         else:
             data[uid]["eingestempelt"] = now.isoformat()
             data[uid]["name"] = str(interaction.user)
-            action_text = "Du hast dich erfolgreich angemeldet."
-            title = "✅ Eingestempelt"
+            
+            embed = discord.Embed(
+                title=f"{project_name} | Stempeluhr",
+                description=f"Du hast dich erfolgreich **vor 0 Minuten** angemeldet.",
+                color=0x22c55e
+            )
+            embed.set_footer(text=footer_text, icon_url=user_avatar)
 
         save_data(data)
-
-        embed = success_embed(
-            title,
-            f"{action_text}\\n\\n🗓️ **{format_time(now)} UTC**"
-        )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ─── COG ───────────────────────────────────────────────────────

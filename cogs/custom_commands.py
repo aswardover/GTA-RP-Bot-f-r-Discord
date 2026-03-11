@@ -19,6 +19,21 @@ class CustomCommands(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.text_commands: Dict[str, Dict[str, Any]] = {}
+        self._cached_settings = {}
+        self._last_mtime = 0
+
+    def _get_settings(self):
+        if not os.path.exists(SETTINGS_FILE):
+             return {}
+        try:
+            current_mtime = os.path.getmtime(SETTINGS_FILE)
+            if current_mtime != self._last_mtime:
+                with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                    self._cached_settings = json.load(f)
+                self._last_mtime = current_mtime
+        except (OSError, json.JSONDecodeError):
+            pass # Keep old cache on error
+        return self._cached_settings
 
     def _build_text_commands(self, settings: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         built: Dict[str, Dict[str, Any]] = {}
@@ -52,10 +67,12 @@ class CustomCommands(commands.Cog):
     async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:
             return
+        
         content = message.content.strip()
         if not content:
             return
-        settings = load_settings()
+
+        settings = self._get_settings()
         self.text_commands = self._build_text_commands(settings)
         cmd_def = self.text_commands.get(content.lower())
         if not cmd_def:
