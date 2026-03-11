@@ -1529,7 +1529,6 @@ else:
             with col3:
                 st.metric("Tickets", str(live_tickets))
             
-            st.markdown("### Letzte Aktivitäten")
             state_text = "Bot online" if runtime.get("online") else "Bot offline"
             state_color = "#86efac" if runtime.get("online") else "#fca5a5"
             last_seen = runtime.get("last_seen") or "unbekannt"
