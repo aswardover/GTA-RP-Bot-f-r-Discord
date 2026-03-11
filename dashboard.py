@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+import streamlit.components.v1 as components
 import json
 import os
 import requests
@@ -164,8 +165,50 @@ st.markdown("""
         margin-top: 0;
         margin-bottom: 1rem;
     }
+    /* Improve readability across the dashboard with high-contrast text. */
+    .stMarkdown,
+    .stMarkdown p,
+    .stMarkdown li,
+    .stMarkdown span,
+    .stCaption,
+    .stAlert,
+    .stRadio label,
+    .stCheckbox label,
+    .stSelectbox label,
+    .stTextInput label,
+    .stTextArea label,
+    .stNumberInput label,
+    h1, h2, h3, h4, h5, h6,
+    p, span, label {
+        color: #ffffff !important;
+    }
     </style>
     """, unsafe_allow_html=True)
+
+def mount_oauth_tab_sync_listener():
+    """Sync login state across tabs and bring users back to the original dashboard tab."""
+    components.html(
+        """
+        <script>
+        (function () {
+            const topWindow = window.parent;
+            if (!topWindow || topWindow.__aswardOauthSyncMounted) {
+                return;
+            }
+            topWindow.__aswardOauthSyncMounted = true;
+            topWindow.addEventListener("storage", function (event) {
+                if (event.key === "asward_oauth_login_done") {
+                    const cleanUrl = topWindow.location.origin + topWindow.location.pathname;
+                    topWindow.location.href = cleanUrl;
+                }
+            });
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
+mount_oauth_tab_sync_listener()
 
 def render_brand_header():
     logo_col, txt_col = st.columns([1, 8])
@@ -497,7 +540,32 @@ def login_form():
                 st.session_state.user_id = user_info["id"]
                 st.session_state.logged_in = True
                 st.query_params.clear()  # Clear params
-                st.rerun()
+                # Notify other tabs and return focus to the original dashboard tab when possible.
+                components.html(
+                    """
+                    <script>
+                    (function () {
+                        const topWindow = window.parent;
+                        const cleanUrl = topWindow.location.origin + topWindow.location.pathname;
+                        try {
+                            localStorage.setItem("asward_oauth_login_done", String(Date.now()));
+                        } catch (e) {}
+                        try {
+                            if (topWindow.opener && !topWindow.opener.closed) {
+                                topWindow.opener.location.href = cleanUrl;
+                                topWindow.opener.focus();
+                                topWindow.close();
+                                return;
+                            }
+                        } catch (e) {}
+                        topWindow.location.href = cleanUrl;
+                    })();
+                    </script>
+                    """,
+                    height=0,
+                )
+                st.info("Login erfolgreich. Du wirst zum urspruenglichen Dashboard-Tab zurueckgeleitet.")
+                st.stop()
         else:
             st.error("Fehler beim Anmelden. Versuche es erneut.")
 
@@ -575,24 +643,13 @@ else:
             st.session_state.active_page = nav_options[0]
 
         sidebar_choice = st.sidebar.radio(
-            "Navigation",
+            "Schnellnavigation",
             nav_options,
             index=nav_options.index(st.session_state.active_page),
             key="sidebar_nav_choice",
         )
         if sidebar_choice != st.session_state.active_page:
             st.session_state.active_page = sidebar_choice
-
-        # Fallback navigation: remains usable even if sidebar is collapsed/hidden.
-        top_choice = st.radio(
-            "Schnellnavigation",
-            nav_options,
-            horizontal=True,
-            index=nav_options.index(st.session_state.active_page),
-            key="top_nav_choice",
-        )
-        if top_choice != st.session_state.active_page:
-            st.session_state.active_page = top_choice
 
         page = page_map[st.session_state.active_page]
         st.sidebar.markdown("<span class='pill-ok'>System Online</span>", unsafe_allow_html=True)
@@ -602,7 +659,7 @@ else:
             st.rerun()
         
         if page == "Übersicht":
-            render_page_header("Bot Übersicht", "Schneller MEE6-Style Überblick über Status und Kernmetriken.")
+            render_page_header("Bot Übersicht", "Schneller Ueberblick ueber Status und Kernmetriken.")
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Status", "Online", delta="Aktiv")
@@ -615,7 +672,7 @@ else:
             st.markdown('<div class="status-card">Bot erfolgreich gestartet. Alle Systeme laufen nominal.</div>', unsafe_allow_html=True)
 
         elif page == "Tickets":
-            render_page_header("Ticket System", "MEE6-Style Ticket-Konfiguration mit Optionen, Kategorien, Manager-Rollen und Transcript.")
+            render_page_header("Ticket System", "Ticket-Konfiguration mit Optionen, Kategorien, Manager-Rollen und Transcript.")
             tickets_enabled = st.checkbox("Tickets aktivieren", value=settings.get("tickets_enabled", False))
 
             st.subheader("Allgemein")
@@ -803,7 +860,7 @@ else:
                 st.success("Automod-Einstellungen gespeichert!")
 
         elif page == "Server Tools":
-            render_page_header("Server Tools", "MEE6-Style Moderationstools fuer den RP-Alltag: Slowmode, Lock/Unlock, Timeout.")
+            render_page_header("Server Tools", "Moderationstools fuer den RP-Alltag: Slowmode, Lock/Unlock, Timeout.")
             tools_enabled = st.checkbox("Server Tools aktivieren", value=settings.get("server_tools_enabled", True))
             st.info("Neue Befehle: /slowmode, /lock, /unlock, /timeout, /untimeout")
             if st.button("Server Tools speichern"):
@@ -1047,7 +1104,7 @@ else:
                 st.rerun()  # Seite neu laden, um Navigation zu aktualisieren
 
         elif page == "Embed Hub":
-            render_page_header("Embed Hub", "Zentrale MEE6-Style Konfiguration fuer alle wichtigen Embed-Vorlagen.")
+            render_page_header("Embed Hub", "Zentrale Konfiguration fuer alle wichtigen Embed-Vorlagen.")
 
             with st.expander("Ankuendigungs-Embed", expanded=True):
                 title, desc, color, footer = embed_config_block(

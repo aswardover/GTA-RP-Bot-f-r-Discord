@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Ticket-System Cog (MEE6-style core features)
+# Ticket-System Cog (core features)
 
 import io
 import json
