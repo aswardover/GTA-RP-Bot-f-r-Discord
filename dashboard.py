@@ -1534,7 +1534,7 @@ else:
             state_color = "#86efac" if runtime.get("online") else "#fca5a5"
             last_seen = runtime.get("last_seen") or "unbekannt"
             st.markdown(
-                f'<div class="status-card"><b style="color:{state_color};">{state_text}</b><br/>Live-Refresh: alle 8 Sekunden<br/>Letztes Heartbeat: {last_seen}</div>',
+                f'<div class="status-card"><b style="color:{state_color};">{state_text}</b></div>',
                 unsafe_allow_html=True,
             )
             _render_member_copy_list(members)
