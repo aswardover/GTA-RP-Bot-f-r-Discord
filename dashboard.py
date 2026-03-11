@@ -1068,7 +1068,7 @@ else:
         nav_sections = [
             ("Grundlegende Informationen", ["Overview", "Tickets", "Stempeluhr"]),
             ("Server-Verwaltung", ["Server Tools", "Auto Mod", "Warns/Sanktionen", "Logging"]),
-            ("Engagement", ["Ankündigungen", "Reaction Roles", "Custom Commands", "Umfragen", "Giveaway", "If Rules", "Embed Hub"]),
+            ("Community", ["Ankündigungen", "Reaction Roles", "Custom Commands", "Umfragen", "Giveaway", "If Rules", "Embed Hub"]),
             ("System", ["Settings"]),
         ]
         nav_icon_map = {
@@ -1088,6 +1088,23 @@ else:
             "Embed Hub": "◈",
             "Settings": "⚙",
         }
+        nav_display_map = {
+            "Overview": "Übersicht",
+            "Tickets": "Tickets",
+            "Stempeluhr": "Stempeluhr",
+            "Server Tools": "Server-Tools",
+            "Auto Mod": "Auto-Moderation",
+            "If Rules": "Wenn-Regeln",
+            "Giveaway": "Gewinnspiel",
+            "Ankündigungen": "Ankündigungen",
+            "Reaction Roles": "Reaktionsrollen",
+            "Custom Commands": "Eigene Befehle",
+            "Umfragen": "Umfragen",
+            "Warns/Sanktionen": "Warns/Sanktionen",
+            "Logging": "Protokolle",
+            "Embed Hub": "Embed-Vorlagen",
+            "Settings": "Einstellungen",
+        }
 
         nav_options = list(page_map.keys())
         if st.session_state.get("active_page") == "Announcements":
@@ -1103,7 +1120,7 @@ else:
         for section_title, section_items in nav_sections:
             st.sidebar.markdown(f"<div class='sidebar-section-title'>{section_title}</div>", unsafe_allow_html=True)
             for nav_key in section_items:
-                nav_label = f"{nav_icon_map.get(nav_key, '•')}  {nav_key}"
+                nav_label = f"{nav_icon_map.get(nav_key, '•')}  {nav_display_map.get(nav_key, nav_key)}"
                 is_active = st.session_state.active_page == nav_key
                 if st.sidebar.button(nav_label, key=f"nav_btn_{nav_key}", use_container_width=True, type="primary" if is_active else "secondary"):
                     st.session_state.active_page = nav_key
@@ -1112,6 +1129,7 @@ else:
 
         page = page_map[st.session_state.active_page]
         st.sidebar.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
+        st.caption(f"Aktiver Server: {chosen_server_label}")
 
         if st.sidebar.button("Abmelden"):
             st.session_state.logged_in = False
@@ -1263,10 +1281,6 @@ else:
                 st.markdown("<div class='ticket-command-row'>/ticket-claim - Beanspruche ein Ticket</div>", unsafe_allow_html=True)
                 st.markdown("<div class='ticket-command-row'>/ticket-close - Schliesse ein Ticket</div>", unsafe_allow_html=True)
                 st.markdown("<div class='ticket-command-row'>/ticket-delete - optional über Kanal-Löschung bei Close</div>", unsafe_allow_html=True)
-
-                settings["ticket_panels"] = ticket_panels
-                settings["tickets_enabled"] = any(p.get("enabled", False) for p in ticket_panels)
-                save_settings(settings)
 
             else:
                 if not ticket_panels:
@@ -1576,10 +1590,6 @@ else:
                 st.markdown("<div class='ticket-command-row'>/stempel_ein - Schicht starten</div>", unsafe_allow_html=True)
                 st.markdown("<div class='ticket-command-row'>/stempel_aus - Schicht beenden</div>", unsafe_allow_html=True)
 
-                settings["stempeluhr_panels"] = stempel_panels
-                settings["stempeluhr_enabled"] = any(p.get("enabled", False) for p in stempel_panels)
-                save_settings(settings)
-
             else:
                 if not stempel_panels:
                     st.session_state.stempeluhr_editor_open = False
@@ -1767,7 +1777,7 @@ else:
                 st.info("Keine Rollen geladen. Trage die Rollen-ID manuell ein.")
             manual_rule_role_id = st.text_input("Rollen-ID (Fallback)", key="ifrules_role_manual")
             action = st.selectbox("Aktion", ["send_message"])
-            selected_channel_id = select_channel_id("Channel", channels_map, None, "ifrules_channel")
+            selected_channel_id = select_channel_id("Kanal", channels_map, None, "ifrules_channel")
             message = st.text_area("Nachricht", placeholder="Verwende {user} und {server}")
             
             if st.button("Regel hinzufügen"):
@@ -1777,7 +1787,7 @@ else:
                     st.error("Bitte wähle eine Rolle oder trage eine Rollen-ID ein.")
                     st.stop()
                 if not selected_channel_id:
-                    st.error("Bitte wähle einen Channel oder trage eine Channel-ID ein.")
+                    st.error("Bitte wähle einen Kanal oder trage eine Kanal-ID ein.")
                     st.stop()
                 new_rule = {
                     "event": event,
@@ -1794,7 +1804,7 @@ else:
             
             st.subheader("Vorhandene Regeln")
             for i, rule in enumerate(custom_rules):
-                st.write(f"**Regel {i+1}:** {rule['event']} für Rolle {rule['role']} -> {rule['action']} in Channel {rule['channel']}")
+                st.write(f"**Regel {i+1}:** {rule['event']} für Rolle {rule['role']} -> {rule['action']} in Kanal {rule['channel']}")
                 if st.button(f"Regel {i+1} löschen", key=f"delete_{i}"):
                     custom_rules.pop(i)
                     settings["custom_rules"] = custom_rules
@@ -1803,22 +1813,22 @@ else:
                     st.rerun()
 
         elif page == "Giveaway":
-            render_page_header("Giveaway", "Passe das Giveaway-Embed im gewohnten Control-Center Stil an.")
-            giveaway_enabled = st.checkbox("Giveaway aktivieren", value=settings.get("giveaway_enabled", False))
+            render_page_header("Gewinnspiel", "Passe das Gewinnspiel-Embed im gewohnten Stil an.")
+            giveaway_enabled = st.checkbox("Gewinnspiel aktivieren", value=settings.get("giveaway_enabled", False))
             
             giveaway_embed_title = st.text_input("Embed Titel", value=settings.get("giveaway_embed_title", "🎉 Giveaway!"))
             giveaway_embed_description = st.text_area("Embed Beschreibung", value=settings.get("giveaway_embed_description", "Gegenstand: {item}\nEndet in: {time}"))
             giveaway_embed_color = st.text_input("Embed Farbe (Hex)", value=settings.get("giveaway_embed_color", "#ff4500"))
             giveaway_embed_footer = st.text_input("Embed Footer", value=settings.get("giveaway_embed_footer", "Klicke auf Teilnehmen!"))
             
-            if st.button("Giveaway Embed speichern"):
+            if st.button("Gewinnspiel-Embed speichern"):
                 settings["giveaway_enabled"] = giveaway_enabled
                 settings["giveaway_embed_title"] = giveaway_embed_title
                 settings["giveaway_embed_description"] = giveaway_embed_description
                 settings["giveaway_embed_color"] = giveaway_embed_color
                 settings["giveaway_embed_footer"] = giveaway_embed_footer
                 save_settings(settings)
-                st.success("Giveaway Embed gespeichert!")
+                st.success("Gewinnspiel-Embed gespeichert!")
 
         elif page == "Ankündigungen":
             render_page_header("Ankündigungen", "Steuere Channel, Embed-Layout und Publishing für Ankündigungen.")
@@ -1858,12 +1868,12 @@ else:
                 st.success("Ankündigung wird veröffentlicht.")
 
         elif page == "Reaction Roles":
-            render_page_header("Reaction Roles", "Baue selbsterklärende Rollen-Panels mit Emoji-Zuordnung.")
-            reaction_roles_enabled = st.checkbox("Reaction Roles aktivieren", value=settings.get("reaction_roles_enabled", False))
+            render_page_header("Reaktionsrollen", "Lege Rollen-Panels mit Emoji-Zuordnung einfach fest.")
+            reaction_roles_enabled = st.checkbox("Reaktionsrollen aktivieren", value=settings.get("reaction_roles_enabled", False))
             rr_data = load_reaction_roles()
             
-            st.subheader("Neue Reaction Role Nachricht")
-            rr_channel_id = select_channel_id("Channel", channels_map, None, "reaction_roles_channel")
+            st.subheader("Neue Reaktionsrollen-Nachricht")
+            rr_channel_id = select_channel_id("Kanal", channels_map, None, "reaction_roles_channel")
             title = st.text_input("Embed Titel", "Wähle deine Rollen")
             description = st.text_area("Embed Beschreibung", "Reagiere mit Emojis um Rollen zu bekommen.")
             color = st.text_input("Embed Farbe (Hex)", "#8a2be2")
@@ -1891,7 +1901,7 @@ else:
                 from database import add_reaction_role
                 await add_reaction_role(str(msg.id), json.dumps(emoji_role_map))
 
-            if st.button("Reaction Role Nachricht senden"):
+            if st.button("Reaktionsrollen-Nachricht senden"):
                 if rr_channel_id and title:
                     emoji_role_map = {}
                     if emoji1 and role1:
@@ -1908,9 +1918,9 @@ else:
                         ch = int(rr_channel_id)
                         embed = discord.Embed(title=title, description=description, color=int(color.lstrip("#"), 16))
                         bot.loop.create_task(_send_reaction_role(ch, embed, emoji_role_map))
-                        st.success("Reaction Role Nachricht wird gesendet!")
+                        st.success("Reaktionsrollen-Nachricht wird gesendet!")
                 else:
-                    st.error("Channel und Titel erforderlich!")
+                    st.error("Kanal und Titel erforderlich!")
 
         elif page == "Umfragen":
             render_page_header("Umfragen", "Definiere Titel, Farbe und Footer für Poll-Embeds.")
@@ -1946,7 +1956,7 @@ else:
             warn_embed_footer = st.text_input("Warn Embed Footer", value=settings.get("warn_embed_footer", "Warnung erteilt"))
             
             st.subheader("Logs")
-            moderation_log_channel_id = select_channel_id("Moderation Log Channel", channels_map, settings.get("moderation_log_channel"), "moderation_log")
+            moderation_log_channel_id = select_channel_id("Moderations-Log-Kanal", channels_map, settings.get("moderation_log_channel"), "moderation_log")
             
             if st.button("Warns/Sanktionen speichern"):
                 settings["management_enabled"] = moderation_enabled
@@ -1964,15 +1974,15 @@ else:
                 st.success("Warns/Sanktionen gespeichert!")
 
         elif page == "Logging":
-            render_page_header("Logging", "Aktiviere Logging und ordne den Ziel-Channel zu.")
-            logging_enabled = st.checkbox("Logging aktivieren", value=settings.get("logging_enabled", True))
-            logging_channel_id = select_channel_id("Logging Channel", channels_map, settings.get("logging_channel_id"), "logging_channel")
+            render_page_header("Protokolle", "Aktiviere Logs und wähle den Ziel-Kanal.")
+            logging_enabled = st.checkbox("Protokolle aktivieren", value=settings.get("logging_enabled", True))
+            logging_channel_id = select_channel_id("Log-Kanal", channels_map, settings.get("logging_channel_id"), "logging_channel")
             
-            if st.button("Logging speichern"):
+            if st.button("Protokolle speichern"):
                 settings["logging_enabled"] = logging_enabled
                 settings["logging_channel_id"] = logging_channel_id
                 save_settings(settings)
-                st.success("Logging gespeichert!")
+                st.success("Protokolle gespeichert!")
 
         elif page == "Einstellungen":
             render_page_header("Allgemeine Einstellungen", "Globale Basiswerte für Kern-Module.")
@@ -2009,11 +2019,11 @@ else:
                 st.info("Nur die Owner-ID kann Dashboard-Benutzer je Server hinzufügen oder entfernen.")
 
         elif page == "Custom Commands":
-            render_page_header("Custom Commands", "Lege Trigger fest und definiere, wie der Bot antwortet, inkl. optionalem Ziel-Channel.")
+            render_page_header("Eigene Befehle", "Lege Trigger fest und definiere, wie der Bot antwortet, inkl. optionalem Ziel-Kanal.")
 
-            custom_enabled = st.checkbox("Custom Commands aktivieren", value=settings.get("commands_enabled", True))
+            custom_enabled = st.checkbox("Eigene Befehle aktivieren", value=settings.get("commands_enabled", True))
             custom_prefix = st.text_input(
-                "Prefix für Custom Commands",
+                "Prefix für eigene Befehle",
                 value=str(settings.get("custom_commands_prefix", settings.get("prefix", "!")) or "!").strip() or "!",
                 help="Beispiel: Prefix '/' + Name 'meto' reagiert auf '/meto'.",
             )
@@ -2077,7 +2087,7 @@ else:
                     settings["custom_commands_prefix"] = custom_prefix
                     settings["commands_enabled"] = custom_enabled
                     save_settings(settings)
-                    st.success("Custom Commands gespeichert.")
+                    st.success("Eigene Befehle gespeichert.")
 
             st.markdown("### Vorhandene Commands")
             commands_list = settings.get("custom_commands", []) if isinstance(settings.get("custom_commands"), list) else []
