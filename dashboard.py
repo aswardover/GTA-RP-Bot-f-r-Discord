@@ -4,6 +4,7 @@ import json
 import os
 import requests
 import discord
+from copy import deepcopy
 from urllib.parse import urlencode
 from config import SETTINGS_FILE, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DASHBOARD_REDIRECT_URI
 
@@ -105,17 +106,43 @@ st.markdown("""
     }
     [data-testid="stSidebar"] .stButton > button {
         width: 100%;
-        border-radius: 9px;
-        background: linear-gradient(90deg, rgba(95,124,255,0.95), rgba(122,77,255,0.9));
-        border: 1px solid rgba(255,255,255,0.14);
-        font-weight: 650;
-        padding: 0.45rem 0.8rem;
+        justify-content: flex-start;
+        text-align: left;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.02);
+        font-weight: 500;
+        font-size: 1.05rem;
+        padding: 0.5rem 0.7rem;
+        min-height: 2.25rem;
+        transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        transform: translateX(2px);
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+    }
+    [data-testid="stSidebar"] .stButton > button[kind="primary"],
+    [data-testid="stSidebar"] .stButton > button[data-testid="stBaseButton-primary"] {
+        background: rgba(95,124,255,0.22) !important;
+        border-color: rgba(95,124,255,0.55) !important;
+        box-shadow: inset 2px 0 0 rgba(95,124,255,0.95), 0 0 12px rgba(95,124,255,0.18);
     }
     [data-testid="stSidebar"] .stSelectbox label {
         font-size: 0.86rem !important;
         color: var(--as-muted) !important;
         text-transform: uppercase;
         letter-spacing: 0.06em;
+    }
+    .sidebar-section-title {
+        color: #9fb0d7;
+        font-size: 0.73rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 700;
+        margin: 0.65rem 0 0.35rem 0;
+    }
+    .sidebar-section-gap {
+        height: 0.35rem;
     }
     [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
         color: var(--as-text);
@@ -144,6 +171,21 @@ st.markdown("""
         background: var(--as-panel-soft);
         color: var(--as-text);
         border-color: rgba(255,255,255,0.12);
+        border-radius: 10px;
+        min-height: 40px;
+    }
+    .stTextArea textarea {
+        min-height: 110px;
+    }
+    .stCheckbox label,
+    .stSelectbox label,
+    .stTextInput label,
+    .stTextArea label,
+    .stNumberInput label,
+    .stMultiSelect label {
+        font-size: 0.92rem !important;
+        font-weight: 600 !important;
+        color: #d8e2ff !important;
     }
     /* Keep Streamlit/BaseWeb dropdown popovers above custom layers and clickable. */
     div[data-baseweb="popover"],
@@ -284,25 +326,119 @@ def load_reaction_roles():
 def save_reaction_roles(data):
     with open("reaction_roles.json", 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
-def load_settings():
-    if os.path.exists(SETTINGS_FILE):
-        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+
+def _safe_read_json(path, fallback):
+    if not os.path.exists(path):
+        return deepcopy(fallback)
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
             return json.load(f)
-    return {}
+    except Exception:
+        return deepcopy(fallback)
+
+@st.cache_data(ttl=3)
+def _load_settings_cached(version_token):
+    return _safe_read_json(SETTINGS_FILE, {})
+
+@st.cache_data(ttl=10)
+def _load_discord_data_cached(version_token):
+    return _safe_read_json(DISCORD_DATA_FILE, {"channels": {}, "roles": {}, "categories": {}, "guilds": []})
+
+def _settings_version_token():
+    try:
+        return int(os.path.getmtime(SETTINGS_FILE))
+    except OSError:
+        return 0
+
+def _discord_version_token():
+    try:
+        return int(os.path.getmtime(DISCORD_DATA_FILE))
+    except OSError:
+        return 0
+
+def _normalize_server_key(value):
+    key = str(value or "default").strip().lower()
+    cleaned = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in key)
+    cleaned = "-".join([part for part in cleaned.split("-") if part])
+    return cleaned or "default"
+
+def _build_server_entries(discord_data, settings):
+    entries = []
+    raw_guilds = discord_data.get("guilds", []) if isinstance(discord_data, dict) else []
+    if isinstance(raw_guilds, dict):
+        for name, gid in raw_guilds.items():
+            label = str(name).strip() or f"Server {gid}"
+            gid_str = str(gid).strip()
+            entries.append({"label": label, "key": _normalize_server_key(gid_str or label)})
+    elif isinstance(raw_guilds, list):
+        for item in raw_guilds:
+            if isinstance(item, dict):
+                label = str(item.get("name") or item.get("guild_name") or item.get("label") or "").strip()
+                gid = str(item.get("id") or item.get("guild_id") or "").strip()
+                if label or gid:
+                    entries.append({"label": label or f"Server {gid}", "key": _normalize_server_key(gid or label)})
+            elif isinstance(item, str) and item.strip():
+                label = item.strip()
+                entries.append({"label": label, "key": _normalize_server_key(label)})
+
+    if not entries:
+        fallback_name = str(settings.get("dashboard_server_name", "ASWARD Server")).strip() or "ASWARD Server"
+        entries = [{"label": fallback_name, "key": "default"}]
+
+    unique = {}
+    for entry in entries:
+        unique[entry["key"]] = entry
+    return list(unique.values())
+
+def _effective_settings_for_server(raw_settings, server_key):
+    effective = deepcopy(raw_settings) if isinstance(raw_settings, dict) else {}
+    profiles = raw_settings.get("server_profiles", {}) if isinstance(raw_settings, dict) else {}
+    profile = profiles.get(server_key, {}) if isinstance(profiles, dict) else {}
+    if isinstance(profile, dict):
+        effective.update(deepcopy(profile))
+    return effective
+
+def _allowed_ids_for_server(raw_settings, server_key):
+    profiles = raw_settings.get("server_profiles", {}) if isinstance(raw_settings, dict) else {}
+    profile = profiles.get(server_key, {}) if isinstance(profiles, dict) else {}
+    allowed = profile.get("dashboard_allowed_users", []) if isinstance(profile, dict) else []
+    return {str(x).strip() for x in allowed if str(x).strip()}
+
+def load_settings():
+    return _load_settings_cached(_settings_version_token())
 
 def save_settings(settings):
-    with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(settings, f, indent=4, ensure_ascii=False)
+    active_server_key = st.session_state.get("active_server_key")
+    payload = deepcopy(settings) if isinstance(settings, dict) else {}
+
+    if active_server_key:
+        raw_settings = _safe_read_json(SETTINGS_FILE, {})
+        profiles = raw_settings.get("server_profiles", {})
+        if not isinstance(profiles, dict):
+            profiles = {}
+
+        profile_data = deepcopy(payload)
+        profile_data.pop("server_profiles", None)
+        profiles[active_server_key] = profile_data
+
+        merged = deepcopy(raw_settings)
+        merged.update(profile_data)
+        merged["server_profiles"] = profiles
+        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(merged, f, indent=4, ensure_ascii=False)
+    else:
+        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=4, ensure_ascii=False)
+
+    _load_settings_cached.clear()
 
 def load_discord_data():
-    if os.path.exists(DISCORD_DATA_FILE):
-        with open(DISCORD_DATA_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {"channels": {}, "roles": {}, "categories": {}}
+    return _load_discord_data_cached(_discord_version_token())
 
 def save_discord_data(data):
     with open(DISCORD_DATA_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
+    _load_discord_data_cached.clear()
 
 def request_discord_data_sync():
     """Setzt ein Trigger-Flag, das der laufende Bot verarbeitet und danach discord_data.json aktualisiert."""
@@ -617,10 +753,21 @@ if not st.session_state.logged_in:
     render_brand_header()
     login_form()
 else:
-    # Check Admin Status
-    is_admin = st.session_state.user_id == ADMIN_ID
-    
-    if not is_admin:
+    user_id = str(st.session_state.user_id)
+    raw_settings = load_settings()
+    raw_discord_data = load_discord_data()
+    is_root_admin = user_id == ADMIN_ID
+
+    all_server_entries = _build_server_entries(raw_discord_data, raw_settings)
+    if is_root_admin:
+        accessible_server_entries = all_server_entries
+    else:
+        accessible_server_entries = [
+            entry for entry in all_server_entries
+            if user_id in _allowed_ids_for_server(raw_settings, entry["key"])
+        ]
+
+    if not (is_root_admin or accessible_server_entries):
         render_brand_header()
         render_page_header("Zugriff verweigert", "Dieser Account hat aktuell keine Dashboard-Berechtigung.")
         st.error("Du kannst aktuell nicht auf diese Seite zugreifen")
@@ -633,33 +780,38 @@ else:
     else:
         # ADMIN DASHBOARD
         render_brand_header()
-        settings = load_settings()
-        discord_data = load_discord_data()
+        discord_data = raw_discord_data
         st.sidebar.markdown("### ASWARD Modules")
         st.sidebar.caption("Steuere alle Bot-Systeme zentral")
-        guild_choices = []
-        raw_guilds = discord_data.get("guilds", []) if isinstance(discord_data, dict) else []
-        if isinstance(raw_guilds, dict):
-            guild_choices = [str(name) for name in raw_guilds.keys() if str(name).strip()]
-        elif isinstance(raw_guilds, list):
-            for item in raw_guilds:
-                if isinstance(item, dict):
-                    name = item.get("name") or item.get("guild_name") or item.get("label")
-                    if name:
-                        guild_choices.append(str(name))
-                elif isinstance(item, str) and item.strip():
-                    guild_choices.append(item.strip())
-        if not guild_choices:
-            guild_choices = [settings.get("dashboard_server_name", "ASWARD Server")]
+        server_entries = accessible_server_entries if accessible_server_entries else all_server_entries
+        display_labels = []
+        display_to_key = {}
+        seen_labels = set()
+        for entry in server_entries:
+            label = entry["label"]
+            key = entry["key"]
+            if label in seen_labels:
+                label = f"{label} [{key[:6]}]"
+            seen_labels.add(label)
+            display_labels.append(label)
+            display_to_key[label] = key
 
-        if "sidebar_server_choice" not in st.session_state or st.session_state.sidebar_server_choice not in guild_choices:
-            st.session_state.sidebar_server_choice = guild_choices[0]
-        st.sidebar.selectbox(
+        if "sidebar_server_choice" not in st.session_state or st.session_state.sidebar_server_choice not in display_labels:
+            st.session_state.sidebar_server_choice = display_labels[0]
+
+        chosen_server_label = st.sidebar.selectbox(
             "Server auswaehlen",
-            guild_choices,
-            index=guild_choices.index(st.session_state.sidebar_server_choice),
+            display_labels,
+            index=display_labels.index(st.session_state.sidebar_server_choice),
             key="sidebar_server_choice",
         )
+        selected_server_key = display_to_key[chosen_server_label]
+        st.session_state.active_server_key = selected_server_key
+        st.session_state.active_server_label = chosen_server_label
+
+        settings = _effective_settings_for_server(raw_settings, selected_server_key)
+        settings["dashboard_server_name"] = chosen_server_label
+
         st.sidebar.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
 
         if st.sidebar.button("Discord-Daten synchronisieren"):
@@ -699,7 +851,7 @@ else:
         )
         categories_map = add_ticket_categories_from_settings(categories_map, settings)
         
-        # Navigation immer vollständig anzeigen; Aktivierung erfolgt im jeweiligen Reiter.
+        # Navigation in Bereiche gegliedert.
         page_map = {
             "Overview": "Übersicht",
             "Tickets": "Tickets",
@@ -716,6 +868,12 @@ else:
             "Embed Hub": "Embed Hub",
             "Settings": "Einstellungen",
         }
+        nav_sections = [
+            ("Grundlegende Informationen", ["Overview", "Tickets", "Stempeluhr"]),
+            ("Server-Verwaltung", ["Server Tools", "Auto Mod", "Moderation", "Logging"]),
+            ("Engagement", ["Announcements", "Reaction Roles", "Polls", "Giveaway", "If Rules", "Embed Hub"]),
+            ("System", ["Settings"]),
+        ]
         nav_icon_map = {
             "Overview": "◉",
             "Tickets": "✦",
@@ -734,25 +892,18 @@ else:
         }
 
         nav_options = list(page_map.keys())
-        nav_display_to_key = {f"{nav_icon_map.get(k, '•')}  {k}": k for k in nav_options}
-        nav_display_options = list(nav_display_to_key.keys())
-
         if "active_page" not in st.session_state or st.session_state.active_page not in nav_options:
             st.session_state.active_page = nav_options[0]
 
-        current_display = next(
-            (disp for disp, key in nav_display_to_key.items() if key == st.session_state.active_page),
-            nav_display_options[0],
-        )
-        sidebar_choice = st.sidebar.radio(
-            "Schnellnavigation",
-            nav_display_options,
-            index=nav_display_options.index(current_display),
-            key="sidebar_nav_choice",
-        )
-        selected_key = nav_display_to_key.get(sidebar_choice, st.session_state.active_page)
-        if selected_key != st.session_state.active_page:
-            st.session_state.active_page = selected_key
+        st.sidebar.markdown("### Schnellnavigation")
+        for section_title, section_items in nav_sections:
+            st.sidebar.markdown(f"<div class='sidebar-section-title'>{section_title}</div>", unsafe_allow_html=True)
+            for nav_key in section_items:
+                nav_label = f"{nav_icon_map.get(nav_key, '•')}  {nav_key}"
+                is_active = st.session_state.active_page == nav_key
+                if st.sidebar.button(nav_label, key=f"nav_btn_{nav_key}", use_container_width=True, type="primary" if is_active else "secondary"):
+                    st.session_state.active_page = nav_key
+            st.sidebar.markdown("<div class='sidebar-section-gap'></div>", unsafe_allow_html=True)
 
         page = page_map[st.session_state.active_page]
         st.sidebar.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
@@ -819,6 +970,8 @@ else:
                 list_col, action_col = st.columns([8, 2])
                 with action_col:
                     if st.button("+ Ein Panel erstellen"):
+                        st.session_state.tickets_editor_snapshot = deepcopy(ticket_panels[0])
+                        st.session_state.tickets_confirm_leave = False
                         st.session_state.tickets_editor_open = True
                         st.rerun()
 
@@ -844,12 +997,14 @@ else:
 
             else:
                 panel = ticket_panels[0]
+                if "tickets_editor_snapshot" not in st.session_state:
+                    st.session_state.tickets_editor_snapshot = deepcopy(panel)
+                if "tickets_confirm_leave" not in st.session_state:
+                    st.session_state.tickets_confirm_leave = False
 
                 back_col, title_col, action_col = st.columns([1, 7, 4])
                 with back_col:
-                    if st.button("<"):
-                        st.session_state.tickets_editor_open = False
-                        st.rerun()
+                    back_btn = st.button("<")
                 with title_col:
                     panel_name = st.text_input("Panelname", value=panel.get("name", "Neues Ticket-Panel"))
                 with action_col:
@@ -931,30 +1086,45 @@ else:
                 closed_category_id = int(opt_cat_closed) if (opt_cat_closed and str(opt_cat_closed).isdigit()) else opt_cat_closed
                 manager_role_ids = [str(roles_map[name]) for name in manager_role_names]
 
-                if discard_btn:
+                draft_panel = {
+                    "name": panel_name,
+                    "enabled": bool(panel.get("enabled", False)),
+                    "panel_channel_id": panel_channel_id,
+                    "manager_roles": manager_role_ids,
+                    "panel_title": panel_title,
+                    "panel_description": panel_description,
+                    "panel_mode": panel_mode,
+                    "options": built_options,
+                    "open_category_id": open_category_id,
+                    "claimed_category_id": claimed_category_id,
+                    "closed_category_id": closed_category_id,
+                    "transcript_channel_id": transcript_channel_id,
+                    "transcript_dm_enabled": transcript_dm_enabled,
+                    "delete_on_close": True,
+                    "opened_message": opened_message,
+                }
+                has_unsaved_changes = draft_panel != st.session_state.tickets_editor_snapshot
+                if has_unsaved_changes:
+                    st.warning("Es gibt ungespeicherte Aenderungen.")
+                    st.session_state.tickets_confirm_leave = st.checkbox(
+                        "Ungespeicherte Aenderungen beim Verlassen verwerfen",
+                        value=st.session_state.tickets_confirm_leave,
+                        key="tickets_confirm_leave_checkbox",
+                    )
+                else:
+                    st.session_state.tickets_confirm_leave = False
+
+                if back_btn or discard_btn:
+                    if has_unsaved_changes and not st.session_state.tickets_confirm_leave:
+                        st.error("Bitte bestaetige zuerst das Verwerfen ungespeicherter Aenderungen.")
+                        st.stop()
+                    st.session_state.pop("tickets_editor_snapshot", None)
+                    st.session_state.tickets_confirm_leave = False
                     st.session_state.tickets_editor_open = False
                     st.rerun()
 
                 if save_btn or publish_btn:
-                    panel.update(
-                        {
-                            "name": panel_name,
-                            "enabled": bool(panel.get("enabled", False)),
-                            "panel_channel_id": panel_channel_id,
-                            "manager_roles": manager_role_ids,
-                            "panel_title": panel_title,
-                            "panel_description": panel_description,
-                            "panel_mode": panel_mode,
-                            "options": built_options,
-                            "open_category_id": open_category_id,
-                            "claimed_category_id": claimed_category_id,
-                            "closed_category_id": closed_category_id,
-                            "transcript_channel_id": transcript_channel_id,
-                            "transcript_dm_enabled": transcript_dm_enabled,
-                            "delete_on_close": True,
-                            "opened_message": opened_message,
-                        }
-                    )
+                    panel.update(draft_panel)
                     ticket_panels[0] = panel
                     settings["ticket_panels"] = ticket_panels
 
@@ -982,6 +1152,8 @@ else:
                         panel["enabled"] = True
 
                     save_settings(settings)
+                    st.session_state.tickets_editor_snapshot = deepcopy(panel)
+                    st.session_state.tickets_confirm_leave = False
                     st.success("Ticket-Panel gespeichert." if save_btn else "Ticket-Panel gespeichert und wird veroeffentlicht.")
 
         elif page == "Stempeluhr":
@@ -1303,6 +1475,16 @@ else:
 
         elif page == "Einstellungen":
             render_page_header("Allgemeine Einstellungen", "Globale Basiswerte fuer Prefix und Kern-Module.")
+            active_server_label = st.session_state.get("active_server_label", settings.get("dashboard_server_name", "ASWARD Server"))
+            st.info(f"Aktiver Server-Kontext: {active_server_label}")
+
+            with st.expander("Anleitung: Server-Umschalter sinnvoll nutzen", expanded=False):
+                st.markdown("1. Waehle links oben den Server im Dropdown aus.")
+                st.markdown("2. Passe Module an und speichere wie gewohnt.")
+                st.markdown("3. Einstellungen werden automatisch im Server-Profil gespeichert.")
+                st.markdown("4. Beim Wechsel des Servers werden dessen gespeicherte Werte geladen.")
+                st.markdown("5. Publish-Buttons arbeiten weiterhin mit den Werten des aktuell gewaehlten Servers.")
+
             st.subheader("Basis-Einstellungen")
             automod_enabled = st.checkbox("Automod global aktivieren", value=settings.get("automod_enabled", False))
             st.subheader("Sonstige Einstellungen")
@@ -1314,6 +1496,26 @@ else:
                 save_settings(settings)
                 st.success("Einstellungen gespeichert!")
                 st.rerun()  # Seite neu laden, um Navigation zu aktualisieren
+
+            st.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
+            st.subheader("Dashboard-Zugriff pro Server")
+            current_allowed_ids = [str(x) for x in settings.get("dashboard_allowed_users", []) if str(x).strip()]
+            if is_root_admin:
+                allowed_input = st.text_input(
+                    "Discord User IDs mit Dashboard-Zugriff (komma-separiert)",
+                    value=", ".join(current_allowed_ids),
+                    key="dashboard_allowed_ids_input",
+                )
+                st.caption("Nur deine Owner-ID kann diese Liste bearbeiten.")
+                if st.button("Dashboard-Benutzer speichern"):
+                    settings["dashboard_allowed_users"] = parse_id_list(allowed_input)
+                    save_settings(settings)
+                    st.success("Zugriffsrechte fuer den ausgewaehlten Server gespeichert.")
+                    st.rerun()
+            else:
+                st.write("Freigegebene IDs:")
+                st.code("\n".join(current_allowed_ids) if current_allowed_ids else "Keine weiteren Benutzer freigegeben.")
+                st.info("Nur die Owner-ID kann Dashboard-Benutzer je Server hinzufuegen oder entfernen.")
 
         elif page == "Embed Hub":
             render_page_header("Embed Hub", "Zentrale Konfiguration fuer alle wichtigen Embed-Vorlagen.")
