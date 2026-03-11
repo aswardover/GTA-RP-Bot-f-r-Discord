@@ -326,6 +326,16 @@ st.markdown("""
         font-weight: 700;
         font-size: 0.95rem;
     }
+    /* Fix for invisible toast text (white on white) */
+    div[data-testid="stToast"] {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+    }
+    div[data-testid="stToast"] p,
+    div[data-testid="stToast"] span,
+    div[data-testid="stToast"] div {
+        color: #000000 !important;
+    }
     /* Improve readability across the dashboard with high-contrast text. */
     .stMarkdown,
     .stMarkdown p,
