@@ -1907,6 +1907,7 @@ else:
                     publish_btn = st.button("Veröffentlichen")
 
                 delete_btn = st.button("Panel jetzt löschen", type="secondary")
+                tickets_unsaved_notice = st.empty()
 
                 with st.expander("Allgemein", expanded=True):
                     panel_channel_id = select_channel_id(
@@ -2001,14 +2002,16 @@ else:
                 }
                 has_unsaved_changes = draft_panel != st.session_state.tickets_editor_snapshot
                 if has_unsaved_changes:
-                    st.warning("Es gibt ungespeicherte Änderungen.")
-                    st.session_state.tickets_confirm_leave = st.checkbox(
-                        "Ungespeicherte Änderungen beim Verlassen verwerfen",
-                        value=st.session_state.tickets_confirm_leave,
-                        key="tickets_confirm_leave_checkbox",
-                    )
+                    with tickets_unsaved_notice.container():
+                        st.warning("Es gibt ungespeicherte Änderungen.")
+                        st.session_state.tickets_confirm_leave = st.checkbox(
+                            "Ungespeicherte Änderungen beim Verlassen verwerfen",
+                            value=st.session_state.tickets_confirm_leave,
+                            key="tickets_confirm_leave_checkbox",
+                        )
                 else:
                     st.session_state.tickets_confirm_leave = False
+                    tickets_unsaved_notice.empty()
 
                 if back_btn or discard_btn:
                     if has_unsaved_changes and not st.session_state.tickets_confirm_leave and not discard_btn:
@@ -2234,6 +2237,7 @@ else:
                     publish_btn = st.button("Veröffentlichen", key="stempeluhr_publish")
 
                 delete_btn = st.button("Panel jetzt löschen", key="stempeluhr_editor_delete", type="secondary")
+                stempeluhr_unsaved_notice = st.empty()
 
                 with st.expander("Allgemein", expanded=True):
                     stempeluhr_enabled = st.checkbox("Stempeluhr aktivieren", value=panel.get("enabled", False), key="stempeluhr_editor_enabled")
@@ -2346,14 +2350,16 @@ else:
 
                 has_unsaved_changes = draft_panel != st.session_state.stempeluhr_editor_snapshot
                 if has_unsaved_changes:
-                    st.warning("Es gibt ungespeicherte Änderungen.")
-                    st.session_state.stempeluhr_confirm_leave = st.checkbox(
-                        "Ungespeicherte Änderungen beim Verlassen verwerfen",
-                        value=st.session_state.stempeluhr_confirm_leave,
-                        key="stempeluhr_confirm_leave_checkbox",
-                    )
+                    with stempeluhr_unsaved_notice.container():
+                        st.warning("Es gibt ungespeicherte Änderungen.")
+                        st.session_state.stempeluhr_confirm_leave = st.checkbox(
+                            "Ungespeicherte Änderungen beim Verlassen verwerfen",
+                            value=st.session_state.stempeluhr_confirm_leave,
+                            key="stempeluhr_confirm_leave_checkbox",
+                        )
                 else:
                     st.session_state.stempeluhr_confirm_leave = False
+                    stempeluhr_unsaved_notice.empty()
 
                 if back_btn or discard_btn:
                     override = discard_btn
