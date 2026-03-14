@@ -2369,39 +2369,52 @@ else:
 
         elif page == "Server Tools":
             render_page_header("Server Tools", "Moderationstools für den RP-Alltag: Slowmode, Lock/Unlock, Timeout.")
-            legacy_default = settings.get("server_tools_enabled", True)
-            
-            st.subheader("Befehle")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                slowmode_enabled = st.toggle("/slowmode", value=settings.get("server_tools_slowmode_enabled", legacy_default))
-                timeout_enabled = st.toggle("/timeout", value=settings.get("server_tools_timeout_enabled", legacy_default))
-            with col2:
-                lock_enabled = st.toggle("/lock", value=settings.get("server_tools_lock_enabled", legacy_default))
-                untimeout_enabled = st.toggle("/untimeout", value=settings.get("server_tools_untimeout_enabled", legacy_default))
-            with col3:
-                unlock_enabled = st.toggle("/unlock", value=settings.get("server_tools_unlock_enabled", legacy_default))
+            current_server_tools_enabled = bool(settings.get("server_tools_enabled", True))
+            server_tools_enabled_gate = st.toggle("Server-Tools aktivieren?", value=current_server_tools_enabled, key="server_tools_enabled_gate")
 
-            st.subheader("Optionen")
-            server_tools_send_as_embed = st.toggle("Antworten als Embed senden", value=settings.get("server_tools_send_as_embed", True))
-
-            if st.button("Server Tools speichern"):
-                settings["server_tools_slowmode_enabled"] = slowmode_enabled
-                settings["server_tools_lock_enabled"] = lock_enabled
-                settings["server_tools_unlock_enabled"] = unlock_enabled
-                settings["server_tools_timeout_enabled"] = timeout_enabled
-                settings["server_tools_untimeout_enabled"] = untimeout_enabled
-                settings["server_tools_send_as_embed"] = server_tools_send_as_embed
-                settings["server_tools_enabled"] = any([
-                    slowmode_enabled,
-                    lock_enabled,
-                    unlock_enabled,
-                    timeout_enabled,
-                    untimeout_enabled,
-                ])
+            # 2 layer funktion: status first, detailed settings only when enabled.
+            if server_tools_enabled_gate != current_server_tools_enabled:
+                settings["server_tools_enabled"] = server_tools_enabled_gate
                 save_settings(settings)
-                _append_audit_entry("Server Tools", "Einstellungen gespeichert", f"Aktive Tools: {sum([slowmode_enabled, lock_enabled, unlock_enabled, timeout_enabled, untimeout_enabled])}")
-                _show_toast("Server Tools gespeichert.")
+                _show_toast("Server-Tools aktiviert." if server_tools_enabled_gate else "Server-Tools deaktiviert.")
+                st.rerun()
+
+            if not server_tools_enabled_gate:
+                st.caption("Server-Tools sind deaktiviert.")
+            else:
+                legacy_default = settings.get("server_tools_enabled", True)
+
+                st.subheader("Befehle")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    slowmode_enabled = st.toggle("/slowmode", value=settings.get("server_tools_slowmode_enabled", legacy_default))
+                    timeout_enabled = st.toggle("/timeout", value=settings.get("server_tools_timeout_enabled", legacy_default))
+                with col2:
+                    lock_enabled = st.toggle("/lock", value=settings.get("server_tools_lock_enabled", legacy_default))
+                    untimeout_enabled = st.toggle("/untimeout", value=settings.get("server_tools_untimeout_enabled", legacy_default))
+                with col3:
+                    unlock_enabled = st.toggle("/unlock", value=settings.get("server_tools_unlock_enabled", legacy_default))
+
+                st.subheader("Optionen")
+                server_tools_send_as_embed = st.toggle("Antworten als Embed senden", value=settings.get("server_tools_send_as_embed", True))
+
+                if st.button("Server Tools speichern"):
+                    settings["server_tools_slowmode_enabled"] = slowmode_enabled
+                    settings["server_tools_lock_enabled"] = lock_enabled
+                    settings["server_tools_unlock_enabled"] = unlock_enabled
+                    settings["server_tools_timeout_enabled"] = timeout_enabled
+                    settings["server_tools_untimeout_enabled"] = untimeout_enabled
+                    settings["server_tools_send_as_embed"] = server_tools_send_as_embed
+                    settings["server_tools_enabled"] = any([
+                        slowmode_enabled,
+                        lock_enabled,
+                        unlock_enabled,
+                        timeout_enabled,
+                        untimeout_enabled,
+                    ])
+                    save_settings(settings)
+                    _append_audit_entry("Server Tools", "Einstellungen gespeichert", f"Aktive Tools: {sum([slowmode_enabled, lock_enabled, unlock_enabled, timeout_enabled, untimeout_enabled])}")
+                    _show_toast("Server Tools gespeichert.")
 
         elif page == "Wenn-Funktionen":
             render_page_header("Wenn-Funktionen", "Eventbasierte Regeln für Rollen-Events und Auto-Aktionen.")
