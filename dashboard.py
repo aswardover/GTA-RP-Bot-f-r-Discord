@@ -2111,6 +2111,11 @@ else:
                         "panel_channel_id": settings.get("stempeluhr_panel_channel_id", ""),
                         "ein_roles": settings.get("stempel_ein_roles", []),
                         "aus_roles": settings.get("stempel_aus_roles", []),
+                        "send_as_embed": settings.get("stempeluhr_send_as_embed", True),
+                        "embed_title": settings.get("stempeluhr_embed_title", "⏱️ Stempeluhr"),
+                        "embed_description": settings.get("stempeluhr_embed_description", "Stempel dich ein oder aus."),
+                        "embed_color": settings.get("stempeluhr_embed_color", "#38bdf8"),
+                        "embed_footer": settings.get("stempeluhr_embed_footer", ""),
                     }
                 ]
 
@@ -2139,6 +2144,11 @@ else:
                                 "panel_channel_id": "",
                                 "ein_roles": [],
                                 "aus_roles": [],
+                                "send_as_embed": True,
+                                "embed_title": "⏱️ Stempeluhr",
+                                "embed_description": "Stempel dich ein oder aus.",
+                                "embed_color": "#38bdf8",
+                                "embed_footer": "",
                             }
                         )
                         settings["stempeluhr_panels"] = stempel_panels
@@ -2265,6 +2275,37 @@ else:
                         )
                     )
 
+                with st.expander("Embed / Panel-Nachricht", expanded=True):
+                    send_as_embed = st.toggle(
+                        "Als Embed senden",
+                        value=bool(panel.get("send_as_embed", True)),
+                        key="stempeluhr_editor_send_as_embed",
+                    )
+                    embed_title = st.text_input(
+                        "Titel",
+                        value=str(panel.get("embed_title", "⏱️ Stempeluhr")),
+                        key="stempeluhr_editor_embed_title",
+                    )
+                    embed_description = st.text_area(
+                        "Beschreibung",
+                        value=str(panel.get("embed_description", "Stempel dich ein oder aus.")),
+                        key="stempeluhr_editor_embed_desc",
+                        placeholder="Verwende {user}, {server} als Platzhalter.",
+                    )
+                    _cur_embed_color = panel.get("embed_color", "#38bdf8")
+                    _picker_val = _cur_embed_color if isinstance(_cur_embed_color, str) and _cur_embed_color.startswith("#") and len(_cur_embed_color) == 7 else "#38bdf8"
+                    _ec1, _ec2 = st.columns([1, 5])
+                    with _ec1:
+                        _picked_color = st.color_picker("Farbe", value=_picker_val, key="stempeluhr_editor_color_picker")
+                    with _ec2:
+                        embed_color = st.text_input("Hex-Farbe", value=_picked_color, key="stempeluhr_editor_embed_color")
+                    embed_footer = st.text_input(
+                        "Footer",
+                        value=str(panel.get("embed_footer", "")),
+                        key="stempeluhr_editor_embed_footer",
+                    )
+                    _render_embed_preview(embed_title, _preview_text(embed_description, "#stempeluhr"), embed_footer)
+
                 resolved_ein = [str(roles_map[r]) for r in selected_ein_roles]
                 resolved_aus = [str(roles_map[r]) for r in selected_aus_roles]
                 final_ein = manual_ein_ids or resolved_ein
@@ -2276,6 +2317,11 @@ else:
                     "panel_channel_id": panel_channel_id,
                     "ein_roles": final_ein,
                     "aus_roles": final_aus,
+                    "send_as_embed": bool(send_as_embed),
+                    "embed_title": embed_title,
+                    "embed_description": embed_description,
+                    "embed_color": embed_color,
+                    "embed_footer": embed_footer,
                 }
 
                 has_unsaved_changes = draft_panel != st.session_state.stempeluhr_editor_snapshot
@@ -2329,6 +2375,11 @@ else:
                     settings["stempeluhr_admin_roles"] = list(dict.fromkeys(final_aus))
                     settings["stempeluhr_panel_channel_id"] = panel_channel_id
                     settings["stempeluhr_panel_name"] = panel_name
+                    settings["stempeluhr_send_as_embed"] = bool(send_as_embed)
+                    settings["stempeluhr_embed_title"] = embed_title
+                    settings["stempeluhr_embed_description"] = embed_description
+                    settings["stempeluhr_embed_color"] = embed_color
+                    settings["stempeluhr_embed_footer"] = embed_footer
 
                     if publish_btn:
                         settings["stempeluhr_publish_trigger"] = True
@@ -3347,6 +3398,20 @@ else:
 
         elif page == "Embed Hub":
             render_page_header("Embed Hub", "Zentrale Konfiguration fuer alle wichtigen Embed-Vorlagen.")
+
+            with st.expander("Stempeluhr-Embed"):
+                title, desc, color, footer = embed_config_block(
+                    settings,
+                    "stempeluhr_embed",
+                    "⏱️ Stempeluhr",
+                    "Stempel dich ein oder aus.",
+                    "#38bdf8",
+                    "",
+                )
+                settings["stempeluhr_embed_title"] = title
+                settings["stempeluhr_embed_description"] = desc
+                settings["stempeluhr_embed_color"] = color
+                settings["stempeluhr_embed_footer"] = footer
 
             with st.expander("Ankündigungs-Embed", expanded=True):
                 title, desc, color, footer = embed_config_block(
