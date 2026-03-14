@@ -17,6 +17,8 @@ TICKETS_STATE_FILE = "tickets_state.json"
 AUDIT_LOG_FILE = "dashboard_audit.json"
 BOT_RUNTIME_FILE = "bot_runtime.json"
 ADMIN_ID = "202768068617699328" # Deine Discord ID
+AUTO_SYNC_STALE_AFTER_SECONDS = 60
+AUTO_SYNC_COOLDOWN_SECONDS = 45
 
 # Discord OAuth2 URLs
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
@@ -955,6 +957,47 @@ def request_discord_data_sync():
     save_settings(settings)
     return True, "Sync angefordert. In wenigen Sekunden sind Channels/Kategorien aktualisiert."
 
+def _discord_data_age_seconds(discord_data):
+    if not isinstance(discord_data, dict):
+        return None
+    meta = discord_data.get("meta", {})
+    if not isinstance(meta, dict):
+        return None
+    exported_at = str(meta.get("exported_at") or "").strip()
+    if not exported_at:
+        return None
+    try:
+        ts = datetime.datetime.fromisoformat(exported_at.replace("Z", "+00:00"))
+    except Exception:
+        return None
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return max(0.0, (now - ts).total_seconds())
+
+def _auto_sync_discord_data_if_needed(
+    discord_data,
+    stale_after_seconds=AUTO_SYNC_STALE_AFTER_SECONDS,
+    cooldown_seconds=AUTO_SYNC_COOLDOWN_SECONDS,
+):
+    age_seconds = _discord_data_age_seconds(discord_data)
+    is_stale = age_seconds is None or age_seconds >= float(stale_after_seconds)
+
+    now_ts = datetime.datetime.now(datetime.timezone.utc).timestamp()
+    last_request_ts = float(st.session_state.get("dashboard_last_auto_sync_request_ts", 0.0) or 0.0)
+    in_cooldown = (now_ts - last_request_ts) < float(cooldown_seconds)
+
+    requested = False
+    if is_stale and not in_cooldown:
+        ok, _ = request_discord_data_sync()
+        if ok:
+            st.session_state.dashboard_last_auto_sync_request_ts = now_ts
+            requested = True
+
+    return {
+        "requested": requested,
+        "age_seconds": age_seconds,
+        "is_stale": is_stale,
+    }
+
 def normalize_named_mapping(raw):
     """Normalisiert Discord-Daten auf Name->ID Mapping (dict), auch wenn Listen gespeichert wurden."""
     if isinstance(raw, dict):
@@ -1081,7 +1124,7 @@ def select_role_id(label, roles_mapping, current_value, key_prefix, allow_manual
         if selected_name:
             selected_id = str(roles_mapping.get(selected_name))
     else:
-        message = "Keine Rollen-Daten verfuegbar. Bitte zuerst Discord-Daten synchronisieren."
+        message = "Keine Rollen-Daten verfuegbar. Auto-Sync laeuft im Hintergrund; bitte kurz warten."
         if allow_manual_input:
             message = "Keine Rollen-Daten verfuegbar. Nutze die Rollen-ID als Eingabe."
         st.info(message)
@@ -1202,9 +1245,9 @@ def select_channel_id(label, channels_mapping, current_value, key_prefix, allow_
         if selected_name:
             selected_id = str(channels_mapping.get(selected_name))
     else:
-        message = "Keine Kanaele verfuegbar. Bitte zuerst Discord-Daten synchronisieren."
+        message = "Keine Kanaele verfuegbar. Auto-Sync laeuft im Hintergrund; bitte kurz warten."
         if allow_manual_input:
-            message = "Keine Kanaele verfuegbar. Nutze unten die Channel-ID oder synchronisiere Discord-Daten."
+            message = "Keine Kanaele verfuegbar. Nutze unten die Channel-ID oder warte kurz auf den Auto-Sync."
         st.warning(message)
 
     if allow_manual_input:
@@ -1234,7 +1277,7 @@ def select_category_id(label, categories_mapping, current_value, key_prefix, all
         if selected_name:
             selected_id = str(categories_mapping.get(selected_name))
     else:
-        message = "Keine Kategorien verfuegbar. Bitte zuerst Discord-Daten synchronisieren."
+        message = "Keine Kategorien verfuegbar. Auto-Sync laeuft im Hintergrund; bitte kurz warten."
         if allow_manual_input:
             message = "Keine Kategorien verfuegbar. Nutze die Kategorie-ID als Eingabe."
         st.warning(message)
@@ -1495,7 +1538,7 @@ else:
             st.markdown("3. Prüfe die **Invite-Berechtigungen** (empfohlen: `8` für Admin-Test, später fein granular einschränken).")
             st.markdown("4. Klicke auf **Bot auf Server einladen** und bestätige im Discord OAuth-Fenster den Zielserver.")
             st.markdown("5. Klicke danach auf **Server speichern**.")
-            st.markdown("6. Wähle den neuen Server im Dropdown aus und drücke **Discord-Daten synchronisieren**.")
+            st.markdown("6. Wähle den neuen Server im Dropdown aus. Discord-Daten werden danach automatisch synchronisiert.")
             st.markdown("7. Öffne anschließend die Module und speichere die ersten server-spezifischen Einstellungen.")
             st.info("Hinweis: Die Server-ID findest du in Discord unter Entwicklermodus -> Rechtsklick auf den Server -> ID kopieren.")
 
@@ -1507,13 +1550,15 @@ else:
             st.markdown("5. Dashboard-Zugriffe pro Server verwaltest du in Einstellungen.")
 
         st.sidebar.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
+        sync_state = _auto_sync_discord_data_if_needed(discord_data)
+        age_seconds = sync_state.get("age_seconds")
+        if sync_state.get("requested"):
+            st.sidebar.caption("Discord-Daten: Auto-Sync angefordert")
+        elif age_seconds is None:
+            st.sidebar.caption("Discord-Daten: Warte auf ersten Export")
+        else:
+            st.sidebar.caption(f"Discord-Daten: letzter Export vor {int(age_seconds)}s")
 
-        if st.sidebar.button("Discord-Daten synchronisieren"):
-            ok, msg = request_discord_data_sync()
-            if ok:
-                st.sidebar.success(msg)
-            else:
-                st.sidebar.error(msg)
         channels_map = normalize_named_mapping(discord_data.get("channels", {}))
         channels_map = add_ids_from_settings(
             channels_map,
