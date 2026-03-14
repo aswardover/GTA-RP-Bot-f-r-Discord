@@ -1232,14 +1232,33 @@ def render_embed_designer(settings, key_prefix, title_default, desc_default, col
 def embed_config_block(settings, key_prefix, title_default, desc_default, color_default, footer_default):
     title = st.text_input("Titel", value=settings.get(f"{key_prefix}_title", title_default), key=f"{key_prefix}_title_input")
     description = st.text_area("Beschreibung", value=settings.get(f"{key_prefix}_description", desc_default), key=f"{key_prefix}_desc_input")
-    
+
     current_color = settings.get(f"{key_prefix}_color", color_default)
     picker_default = current_color if isinstance(current_color, str) and current_color.startswith("#") and len(current_color) == 7 else "#2b2d42"
+    picker_key = f"{key_prefix}_picker"
+    input_key = f"{key_prefix}_color_input"
+
+    if picker_key not in st.session_state:
+        st.session_state[picker_key] = picker_default
+
+    def on_picker_change():
+        # Input is bound to picker state via value=picked.
+        pass
+
+    def on_text_change():
+        value = str(st.session_state.get(input_key) or "").strip()
+        if value.startswith("#") and len(value) == 7:
+            try:
+                int(value[1:], 16)
+                st.session_state[picker_key] = value
+            except ValueError:
+                pass
+
     ec1, ec2 = st.columns([1, 5])
     with ec1:
-        picked = st.color_picker("Farbe", value=picker_default, key=f"{key_prefix}_picker")
+        picked = st.color_picker("Farbe", key=picker_key, on_change=on_picker_change)
     with ec2:
-        color = st.text_input("Farbe (Hex)", value=picked, key=f"{key_prefix}_color_input")
+        color = st.text_input("Farbe (Hex)", value=picked, key=input_key, on_change=on_text_change)
 
     footer = st.text_input("Footer", value=settings.get(f"{key_prefix}_footer", footer_default), key=f"{key_prefix}_footer_input")
     return title, description, color, footer
