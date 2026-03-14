@@ -1629,44 +1629,26 @@ else:
             "Audit-Logs": "Audit-Logs",
         }
         nav_sections = [
-            ("Grundlegende Informationen", ["Overview", "Tickets", "Stempeluhr"]),
-            ("Server-Verwaltung", ["Server Tools", "Auto Mod", "Warns/Sanktionen", "Logging"]),
-            ("Community", ["Ankündigungen", "Reaction Roles", "Custom Commands", "Umfragen", "Giveaway", "If Rules", "Embed Hub"]),
+            ("Grundlegende Information", ["Overview", "Server Tools", "Embed Hub", "Auto Mod", "Logging"]),
+            ("Server Verwaltung", ["Tickets", "Stempeluhr", "Warns/Sanktionen", "Custom Commands", "If Rules", "Reaction Roles"]),
+            ("Community", ["Ankündigungen", "Umfragen", "Giveaway"]),
             ("System", ["Settings", "Audit-Logs"]),
         ]
-        nav_icon_map = {
-            "Overview": "◉",
-            "Tickets": "✦",
-            "Stempeluhr": "◷",
-            "Server Tools": "🛠",
-            "Auto Mod": "🛡",
-            "If Rules": "↯",
-            "Giveaway": "🎁",
-            "Ankündigungen": "📣",
-            "Reaction Roles": "◎",
-            "Custom Commands": "⌘",
-            "Umfragen": "🗳",
-            "Warns/Sanktionen": "⚖",
-            "Logging": "⎘",
-            "Embed Hub": "◈",
-            "Settings": "⚙",
-            "Audit-Logs": "🧾",
-        }
         nav_display_map = {
             "Overview": "Übersicht",
             "Tickets": "Tickets",
             "Stempeluhr": "Stempeluhr",
             "Server Tools": "Server-Tools",
             "Auto Mod": "Auto-Moderation",
-            "If Rules": "Wenn-Regeln",
+            "If Rules": "Wenn Regeln",
             "Giveaway": "Gewinnspiel",
             "Ankündigungen": "Ankündigungen",
             "Reaction Roles": "Reaktionsrollen",
             "Custom Commands": "Eigene Befehle",
             "Umfragen": "Umfragen",
-            "Warns/Sanktionen": "Warns/Sanktionen",
+            "Warns/Sanktionen": "Warn/Sanktionen",
             "Logging": "Protokolle",
-            "Embed Hub": "Embed-Vorlagen",
+            "Embed Hub": "Embed Vorlagen",
             "Settings": "Einstellungen",
             "Audit-Logs": "Audit-Logs",
         }
@@ -1682,15 +1664,14 @@ else:
             st.session_state.active_page = nav_options[0]
 
         st.sidebar.markdown("### Schnellnavigation")
-        for section_title, section_items in nav_sections:
-            st.sidebar.markdown(f"<div class='sidebar-section-title'>{section_title}</div>", unsafe_allow_html=True)
-            for nav_key in section_items:
-                nav_label = f"{nav_icon_map.get(nav_key, '•')}  {nav_display_map.get(nav_key, nav_key)}"
-                is_active = st.session_state.active_page == nav_key
-                if st.sidebar.button(nav_label, key=f"nav_btn_{nav_key}", use_container_width=True, type="primary" if is_active else "secondary"):
-                    st.session_state.active_page = nav_key
-                    st.rerun()
-            st.sidebar.markdown("<div class='sidebar-section-gap'></div>", unsafe_allow_html=True)
+        for idx, (section_title, section_items) in enumerate(nav_sections):
+            with st.sidebar.expander(section_title, expanded=(idx == 0)):
+                for nav_key in section_items:
+                    nav_label = nav_display_map.get(nav_key, nav_key)
+                    is_active = st.session_state.active_page == nav_key
+                    if st.button(nav_label, key=f"nav_btn_{nav_key}", use_container_width=True, type="primary" if is_active else "secondary"):
+                        st.session_state.active_page = nav_key
+                        st.rerun()
 
         page = page_map[st.session_state.active_page]
         st.sidebar.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
