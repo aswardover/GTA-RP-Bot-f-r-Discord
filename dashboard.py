@@ -1656,13 +1656,12 @@ else:
             "Logging": "Logging",
             "Embed Hub": "Embed Hub",
             "Settings": "Einstellungen",
-            "Audit-Logs": "Audit-Logs",
         }
         nav_sections = [
             ("Grundlegende Information", ["Overview", "Server Tools", "Auto Mod", "Logging", "Embed Hub"]),
             ("Server Verwaltung", ["Tickets", "Stempeluhr", "Warns/Sanktionen", "Custom Commands", "If Rules", "Reaction Roles"]),
             ("Community", ["Ankündigungen", "Umfragen", "Giveaway"]),
-            ("System", ["Settings", "Audit-Logs"]),
+            ("System", ["Settings"]),
         ]
         nav_display_map = {
             "Overview": "Übersicht",
@@ -1680,7 +1679,6 @@ else:
             "Logging": "Protokolle",
             "Embed Hub": "Embed Vorlagen",
             "Settings": "Einstellungen",
-            "Audit-Logs": "Audit-Logs",
         }
 
         nav_options = list(page_map.keys())
@@ -1737,6 +1735,19 @@ else:
 
         elif page == "Tickets":
             render_page_header("Ticketsystem", "Übersicht und pro Panel ein strukturierter Editor.")
+
+            current_tickets_system_enabled = bool(settings.get("tickets_system_enabled", True))
+            tickets_system_enabled = st.toggle("Ticketsystem aktivieren?", value=current_tickets_system_enabled, key="tickets_system_enabled_gate")
+
+            if tickets_system_enabled != current_tickets_system_enabled:
+                settings["tickets_system_enabled"] = tickets_system_enabled
+                save_settings(settings)
+                _show_toast("Ticketsystem aktiviert." if tickets_system_enabled else "Ticketsystem deaktiviert.")
+                st.rerun()
+
+            if not tickets_system_enabled:
+                st.caption("Ticketsystem ist deaktiviert.")
+                st.stop()
 
             if "tickets_editor_open" not in st.session_state:
                 st.session_state.tickets_editor_open = False
@@ -2072,6 +2083,19 @@ else:
 
         elif page == "Stempeluhr":
             render_page_header("Stempeluhr System", "Übersicht und strukturierter Editor für Rollen und Panel-Verwaltung.")
+
+            current_stempeluhr_system_enabled = bool(settings.get("stempeluhr_system_enabled", True))
+            stempeluhr_system_enabled = st.toggle("Stempeluhr aktivieren?", value=current_stempeluhr_system_enabled, key="stempeluhr_system_enabled_gate")
+
+            if stempeluhr_system_enabled != current_stempeluhr_system_enabled:
+                settings["stempeluhr_system_enabled"] = stempeluhr_system_enabled
+                save_settings(settings)
+                _show_toast("Stempeluhr aktiviert." if stempeluhr_system_enabled else "Stempeluhr deaktiviert.")
+                st.rerun()
+
+            if not stempeluhr_system_enabled:
+                st.caption("Stempeluhr ist deaktiviert.")
+                st.stop()
 
             if "stempeluhr_editor_open" not in st.session_state:
                 st.session_state.stempeluhr_editor_open = False
@@ -2421,7 +2445,20 @@ else:
             custom_rules = settings.get("custom_rules", []) if isinstance(settings.get("custom_rules"), list) else []
             custom_rules = [_normalize_if_rule(r) for r in custom_rules]
             settings["custom_rules"] = custom_rules
-            custom_enabled = st.toggle("Wenn-Funktionen aktivieren", value=settings.get("custom_rules_enabled", False))
+
+            current_wenn_enabled = bool(settings.get("custom_rules_enabled", False))
+            custom_enabled = st.toggle("Wenn-Funktionen aktivieren?", value=current_wenn_enabled, key="custom_rules_enabled_gate")
+
+            if custom_enabled != current_wenn_enabled:
+                settings["custom_rules_enabled"] = custom_enabled
+                save_settings(settings)
+                _show_toast("Wenn-Funktionen aktiviert." if custom_enabled else "Wenn-Funktionen deaktiviert.")
+                st.rerun()
+
+            if not custom_enabled:
+                st.caption("Wenn-Funktionen sind deaktiviert.")
+                st.stop()
+
             ifrules_scope_role_names = st.multiselect(
                 "Regeln nur für Mitglieder mit diesen Rollen (optional)",
                 options=list(roles_map.keys()),
@@ -2601,11 +2638,21 @@ else:
 
         elif page == "Giveaway":
             render_page_header("Gewinnspiel", "Passe das Gewinnspiel-Embed im gewohnten Stil an.")
-            col1, col2 = st.columns(2)
-            with col1:
-                giveaway_enabled = st.toggle("Gewinnspiel aktivieren", value=settings.get("giveaway_enabled", False))
-            with col2:
-                giveaway_send_as_embed = st.toggle("Nachrichten als Embed senden", value=settings.get("giveaway_send_as_embed", True))
+
+            current_giveaway_enabled = bool(settings.get("giveaway_enabled", False))
+            giveaway_enabled = st.toggle("Gewinnspiel aktivieren?", value=current_giveaway_enabled, key="giveaway_enabled_gate")
+
+            if giveaway_enabled != current_giveaway_enabled:
+                settings["giveaway_enabled"] = giveaway_enabled
+                save_settings(settings)
+                _show_toast("Gewinnspiel aktiviert." if giveaway_enabled else "Gewinnspiel deaktiviert.")
+                st.rerun()
+
+            if not giveaway_enabled:
+                st.caption("Gewinnspiel ist deaktiviert.")
+                st.stop()
+
+            giveaway_send_as_embed = st.toggle("Nachrichten als Embed senden", value=settings.get("giveaway_send_as_embed", True))
 
             giveaway_embed_title, giveaway_embed_description, giveaway_embed_color, giveaway_embed_footer = render_embed_designer(
                 settings,
@@ -2629,14 +2676,23 @@ else:
 
         elif page == "Ankündigungen":
             render_page_header("Ankündigungen", "Steuere Channel, Embed-Layout und Publishing für Ankündigungen.")
-            col1, col2 = st.columns(2)
-            with col1:
-                announce_enabled = st.toggle("Ankündigungen aktivieren", value=settings.get("announce_enabled", True))
-            
-            with col2:
-                current_announce_channel = settings.get("announce_channel_id", "")
-                announce_channel_id = select_channel_id("Ankündigungs-Channel", channels_map, current_announce_channel, "announce_channel")
-            
+
+            current_announce_enabled = bool(settings.get("announce_enabled", True))
+            announce_enabled = st.toggle("Ankündigungen aktivieren?", value=current_announce_enabled, key="announce_enabled_gate")
+
+            if announce_enabled != current_announce_enabled:
+                settings["announce_enabled"] = announce_enabled
+                save_settings(settings)
+                _show_toast("Ankündigungen aktiviert." if announce_enabled else "Ankündigungen deaktiviert.")
+                st.rerun()
+
+            if not announce_enabled:
+                st.caption("Ankündigungen sind deaktiviert.")
+                st.stop()
+
+            current_announce_channel = settings.get("announce_channel_id", "")
+            announce_channel_id = select_channel_id("Ankündigungs-Channel", channels_map, current_announce_channel, "announce_channel")
+
             announce_embed_enabled = st.toggle("Als Embed senden", value=settings.get("announce_embed_enabled", False))
             if announce_embed_enabled:
                 announce_embed_title, announce_embed_description, announce_embed_color, announce_embed_footer = render_embed_designer(
@@ -2688,7 +2744,20 @@ else:
 
         elif page == "Reaction Roles":
             render_page_header("Reaktionsrollen", "Lege Rollen-Panels mit Emoji-Zuordnung einfach fest.")
-            reaction_roles_enabled = st.toggle("Reaktionsrollen aktivieren", value=settings.get("reaction_roles_enabled", False))
+
+            current_rr_enabled = bool(settings.get("reaction_roles_enabled", False))
+            reaction_roles_enabled = st.toggle("Reaktionsrollen aktivieren?", value=current_rr_enabled, key="reaction_roles_enabled_gate")
+
+            if reaction_roles_enabled != current_rr_enabled:
+                settings["reaction_roles_enabled"] = reaction_roles_enabled
+                save_settings(settings)
+                _show_toast("Reaktionsrollen aktiviert." if reaction_roles_enabled else "Reaktionsrollen deaktiviert.")
+                st.rerun()
+
+            if not reaction_roles_enabled:
+                st.caption("Reaktionsrollen sind deaktiviert.")
+                st.stop()
+
             rr_data = load_reaction_roles()
 
             rr_panels = settings.get("reaction_role_panels", []) if isinstance(settings.get("reaction_role_panels"), list) else []
@@ -2933,7 +3002,20 @@ else:
 
         elif page == "Umfragen":
             render_page_header("Umfragen", "Definiere Titel, Farbe und Footer für Poll-Embeds.")
-            polls_enabled = st.toggle("Umfragen aktivieren", value=settings.get("polls_enabled", False))
+
+            current_polls_enabled = bool(settings.get("polls_enabled", False))
+            polls_enabled = st.toggle("Umfragen aktivieren?", value=current_polls_enabled, key="polls_enabled_gate")
+
+            if polls_enabled != current_polls_enabled:
+                settings["polls_enabled"] = polls_enabled
+                save_settings(settings)
+                _show_toast("Umfragen aktiviert." if polls_enabled else "Umfragen deaktiviert.")
+                st.rerun()
+
+            if not polls_enabled:
+                st.caption("Umfragen sind deaktiviert.")
+                st.stop()
+
             poll_send_as_embed = st.toggle("Nachrichten als Embed senden", value=settings.get("poll_send_as_embed", True))
             poll_embed_title, poll_embed_description, poll_embed_color, poll_embed_footer = render_embed_designer(
                 settings,
@@ -2957,9 +3039,21 @@ else:
 
         elif page == "Warns/Sanktionen":
             render_page_header("Warns/Sanktionen", "Sanktions-, Warn- und Log-Templates zentral verwalten.")
-            
+
+            current_management_enabled = bool(settings.get("management_enabled", True))
+            moderation_enabled = st.toggle("Warns/Sanktionen aktivieren?", value=current_management_enabled, key="management_enabled_gate")
+
+            if moderation_enabled != current_management_enabled:
+                settings["management_enabled"] = moderation_enabled
+                save_settings(settings)
+                _show_toast("Warns/Sanktionen aktiviert." if moderation_enabled else "Warns/Sanktionen deaktiviert.")
+                st.rerun()
+
+            if not moderation_enabled:
+                st.caption("Warns/Sanktionen sind deaktiviert.")
+                st.stop()
+
             st.subheader("Sanktionen")
-            moderation_enabled = st.toggle("Moderation aktivieren", value=settings.get("management_enabled", True))
             sanktion_role_id = select_role_id("Sanktions-Rolle", roles_map, settings.get("sanktion_role_id"), "moderation_sanktion_role")
             sanktion_embed_title, sanktion_embed_description, sanktion_embed_color, sanktion_embed_footer = render_embed_designer(
                 settings,
@@ -3061,46 +3155,22 @@ else:
                 st.code("\n".join(current_allowed_ids) if current_allowed_ids else "Keine weiteren Benutzer freigegeben.")
                 st.info("Nur die Owner-ID kann Dashboard-Benutzer je Server hinzufügen oder entfernen.")
 
-        elif page == "Audit-Logs":
-            render_page_header("Audit-Logs", "Status, Änderungen und Aktionen pro Server nachvollziehen.")
-            current_server_key = st.session_state.get("active_server_key", "default")
-            only_current_server = st.toggle("Nur aktuellen Server anzeigen", value=True)
-            max_rows = st.slider("Einträge", min_value=20, max_value=300, value=120, step=20)
-            entries = _read_audit_entries(current_server_key if only_current_server else None, max_rows)
-
-            status_col1, status_col2, status_col3 = st.columns(3)
-            queued = len([e for e in entries if str(e.get("status")) == "queued"])
-            sent = len([e for e in entries if str(e.get("status")) == "sent"])
-            failed = len([e for e in entries if str(e.get("status")) == "failed"])
-            with status_col1:
-                st.metric("Queued", str(queued))
-            with status_col2:
-                st.metric("Sent", str(sent))
-            with status_col3:
-                st.metric("Failed", str(failed))
-
-            if not entries:
-                st.info("Noch keine Audit-Einträge vorhanden.")
-            else:
-                for idx, item in enumerate(entries):
-                    st.markdown(
-                        f"<div class='ticket-panel-card'><div class='ticket-panel-head'><span>{item.get('module', '-')}</span>"
-                        f"<span class='pill-ok'>{item.get('status', 'ok')}</span></div>"
-                        f"<div class='ticket-panel-meta'>{item.get('ts', '-')} | Aktion: {item.get('action', '-')}</div>"
-                        f"<div class='ticket-panel-meta'>Server: {item.get('server_label', '-')} | Actor: {item.get('actor_id', '-')}</div>"
-                        f"<div class='ticket-panel-meta'>Details: {item.get('details', '-') or '-'}</div></div>",
-                        unsafe_allow_html=True,
-                    )
-                if st.button("Audit-Logs leeren", type="secondary"):
-                    with open(AUDIT_LOG_FILE, 'w', encoding='utf-8') as f:
-                        json.dump([], f, indent=2, ensure_ascii=False)
-                    _show_toast("Audit-Logs wurden geleert.")
-                    st.rerun()
-
         elif page == "Custom Commands":
             render_page_header("Eigene Befehle", "Lege Trigger fest und definiere, wie der Bot antwortet, inkl. optionalem Ziel-Kanal.")
 
-            custom_enabled = st.toggle("Eigene Befehle aktivieren", value=settings.get("commands_enabled", True))
+            current_commands_enabled = bool(settings.get("commands_enabled", True))
+            custom_enabled = st.toggle("Eigene Befehle aktivieren?", value=current_commands_enabled, key="commands_enabled_gate")
+
+            if custom_enabled != current_commands_enabled:
+                settings["commands_enabled"] = custom_enabled
+                save_settings(settings)
+                _show_toast("Eigene Befehle aktiviert." if custom_enabled else "Eigene Befehle deaktiviert.")
+                st.rerun()
+
+            if not custom_enabled:
+                st.caption("Eigene Befehle sind deaktiviert.")
+                st.stop()
+
             custom_prefix = st.text_input(
                 "Prefix für eigene Befehle",
                 value=str(settings.get("custom_commands_prefix", settings.get("prefix", "!")) or "!").strip() or "!",
