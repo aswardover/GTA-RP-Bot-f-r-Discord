@@ -1898,7 +1898,7 @@ else:
 
                 back_col, title_col, action_col = st.columns([1, 7, 4])
                 with back_col:
-                    back_btn = st.button("<")
+                    back_btn = st.button("Zurück", key="tickets_back", use_container_width=True)
                 with title_col:
                     panel_name = st.text_input("Panelname", value=panel.get("name", "Neues Ticket-Panel"))
                 with action_col:
@@ -2228,7 +2228,7 @@ else:
 
                 back_col, title_col, action_col = st.columns([1, 7, 4])
                 with back_col:
-                    back_btn = st.button("<", key="stempeluhr_back")
+                    back_btn = st.button("Zurück", key="stempeluhr_back", use_container_width=True)
                 with title_col:
                     panel_name = st.text_input("Panelname", value=panel.get("name", "Stempeluhr Panel"), key="stempeluhr_panel_name_input")
                 with action_col:
@@ -2644,7 +2644,7 @@ else:
 
                 back_col, title_col, action_col = st.columns([1, 7, 4])
                 with back_col:
-                    back_btn = st.button("<", key="ifrules_back")
+                    back_btn = st.button("Zurück", key="ifrules_back", use_container_width=True)
                 with title_col:
                     st.markdown(f"### Regel {selected_idx + 1} bearbeiten")
                 with action_col:
@@ -2979,7 +2979,7 @@ else:
 
                 back_col, title_col, action_col = st.columns([1, 7, 4])
                 with back_col:
-                    back_btn = st.button("<", key="rr_back")
+                    back_btn = st.button("Zurück", key="rr_back", use_container_width=True)
                 with title_col:
                     panel_name = st.text_input("Panelname", value=panel.get("name", f"Reaktionsrollen Panel {selected_idx + 1}"), key="rr_panel_name")
                 with action_col:
@@ -3365,7 +3365,7 @@ else:
 
                 back_col, title_col, action_col = st.columns([1, 7, 4])
                 with back_col:
-                    back_btn = st.button("<", key="custom_back")
+                    back_btn = st.button("Zurück", key="custom_back", use_container_width=True)
                 with title_col:
                     st.markdown(f"### Befehl {selected_idx + 1} bearbeiten")
                 with action_col:
