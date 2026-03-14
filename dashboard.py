@@ -2264,20 +2264,25 @@ else:
                         default=default_aus_names,
                         key="stempeluhr_editor_aus_roles",
                     )
-                    manual_ein_ids = parse_id_list(
-                        st.text_input(
-                            "Rollen-IDs für /stempel_ein (Fallback, komma-separiert)",
-                            value=", ".join([str(x) for x in panel.get("ein_roles", [])]),
-                            key="stempeluhr_editor_ein_roles_manual",
+                    with st.expander("Manuelle Rollen-IDs (optional)", expanded=False):
+                        st.caption("Nur nutzen, wenn eine Rolle im Dropdown fehlt oder du direkt per ID arbeiten willst.")
+                        st.caption("Sobald hier Werte eingetragen sind, haben sie Vorrang vor der Dropdown-Auswahl.")
+                        manual_ein_ids = parse_id_list(
+                            st.text_input(
+                                "IDs für /stempel_ein (komma-separiert)",
+                                value=", ".join([str(x) for x in panel.get("ein_roles", [])]),
+                                key="stempeluhr_editor_ein_roles_manual",
+                                placeholder="z. B. 123456789, 987654321",
+                            )
                         )
-                    )
-                    manual_aus_ids = parse_id_list(
-                        st.text_input(
-                            "Rollen-IDs für /stempel_aus (Fallback, komma-separiert)",
-                            value=", ".join([str(x) for x in panel.get("aus_roles", [])]),
-                            key="stempeluhr_editor_aus_roles_manual",
+                        manual_aus_ids = parse_id_list(
+                            st.text_input(
+                                "IDs für /stempel_aus (komma-separiert)",
+                                value=", ".join([str(x) for x in panel.get("aus_roles", [])]),
+                                key="stempeluhr_editor_aus_roles_manual",
+                                placeholder="z. B. 123456789, 987654321",
+                            )
                         )
-                    )
 
                 with st.expander("Embed / Panel-Nachricht", expanded=True):
                     send_as_embed = st.toggle(
