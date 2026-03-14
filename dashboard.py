@@ -2286,45 +2286,55 @@ else:
 
         elif page == "Automod":
             render_page_header("Automod", "Schütze den Server mit Spam-, Caps- und Wortfiltern.")
-            
-            automod_enabled = st.toggle("Automod aktivieren", value=settings.get("automod_enabled", False))
-            if automod_enabled:
-                st.caption("Auto-Moderation ist aktiv.")
-            
-            with st.expander("Filter & Schwellenwerte", expanded=True):
-                banned_words = st.text_area("Verbotene Wörter (kommasepariert)", value=", ".join(settings.get("automod_banned_words", [])))
-                spam_threshold = st.number_input("Spam-Schwellenwert", value=settings.get("automod_spam_threshold", 5), min_value=1)
-                spam_timeframe = st.number_input("Spam-Zeitfenster (Sekunden)", value=settings.get("automod_spam_timeframe", 10), min_value=1)
-                caps_threshold = st.slider("Caps-Schwellenwert", 0.0, 1.0, value=settings.get("automod_caps_threshold", 0.7))
-            
-            action = st.selectbox("Aktion bei Verstoß", ["delete", "warn", "mute", "ban"], index=["delete", "warn", "mute", "ban"].index(settings.get("automod_action", "delete")))
-            
-            st.subheader("Zusätzliche Filter")
-            col1, col2 = st.columns(2)
-            with col1:
-                caps_enabled = st.toggle("Caps-Lock Filter", value=settings.get("automod_caps_enabled", True))
-                block_links = st.toggle("Links blockieren", value=settings.get("automod_block_links", False))
-            with col2:
-                block_invites = st.toggle("Invite-Links blockieren", value=settings.get("automod_block_invites", False))
 
-            log_channel_id = select_channel_id("Log-Channel", channels_map, settings.get("automod_log_channel"), "automod_log")
-            
-            mute_role_id = select_role_id("Mute-Rolle", roles_map, settings.get("automod_mute_role"), "automod_mute_role")
-            
-            if st.button("Automod speichern"):
+            current_automod_enabled = bool(settings.get("automod_enabled", False))
+            automod_enabled = st.toggle("Automod aktivieren?", value=current_automod_enabled, key="automod_enabled_gate")
+
+            # Persist activation immediately so the second layer appears/disappears right away.
+            if automod_enabled != current_automod_enabled:
                 settings["automod_enabled"] = automod_enabled
-                settings["automod_banned_words"] = [w.strip() for w in banned_words.split(",") if w.strip()]
-                settings["automod_spam_threshold"] = spam_threshold
-                settings["automod_spam_timeframe"] = spam_timeframe
-                settings["automod_caps_enabled"] = caps_enabled
-                settings["automod_caps_threshold"] = caps_threshold
-                settings["automod_block_links"] = block_links
-                settings["automod_block_invites"] = block_invites
-                settings["automod_action"] = action
-                settings["automod_log_channel"] = log_channel_id
-                settings["automod_mute_role"] = mute_role_id
                 save_settings(settings)
-                _show_toast("Automod-Einstellungen gespeichert!")
+                _show_toast("Automod aktiviert." if automod_enabled else "Automod deaktiviert.")
+                st.rerun()
+
+            if not automod_enabled:
+                st.caption("Automod ist deaktiviert.")
+            else:
+                st.caption("Auto-Moderation ist aktiv.")
+
+                with st.expander("Filter & Schwellenwerte", expanded=True):
+                    banned_words = st.text_area("Verbotene Wörter (kommasepariert)", value=", ".join(settings.get("automod_banned_words", [])))
+                    spam_threshold = st.number_input("Spam-Schwellenwert", value=settings.get("automod_spam_threshold", 5), min_value=1)
+                    spam_timeframe = st.number_input("Spam-Zeitfenster (Sekunden)", value=settings.get("automod_spam_timeframe", 10), min_value=1)
+                    caps_threshold = st.slider("Caps-Schwellenwert", 0.0, 1.0, value=settings.get("automod_caps_threshold", 0.7))
+
+                action = st.selectbox("Aktion bei Verstoß", ["delete", "warn", "mute", "ban"], index=["delete", "warn", "mute", "ban"].index(settings.get("automod_action", "delete")))
+
+                st.subheader("Zusätzliche Filter")
+                col1, col2 = st.columns(2)
+                with col1:
+                    caps_enabled = st.toggle("Caps-Lock Filter", value=settings.get("automod_caps_enabled", True))
+                    block_links = st.toggle("Links blockieren", value=settings.get("automod_block_links", False))
+                with col2:
+                    block_invites = st.toggle("Invite-Links blockieren", value=settings.get("automod_block_invites", False))
+
+                log_channel_id = select_channel_id("Log-Channel", channels_map, settings.get("automod_log_channel"), "automod_log")
+                mute_role_id = select_role_id("Mute-Rolle", roles_map, settings.get("automod_mute_role"), "automod_mute_role")
+
+                if st.button("Automod speichern"):
+                    settings["automod_enabled"] = automod_enabled
+                    settings["automod_banned_words"] = [w.strip() for w in banned_words.split(",") if w.strip()]
+                    settings["automod_spam_threshold"] = spam_threshold
+                    settings["automod_spam_timeframe"] = spam_timeframe
+                    settings["automod_caps_enabled"] = caps_enabled
+                    settings["automod_caps_threshold"] = caps_threshold
+                    settings["automod_block_links"] = block_links
+                    settings["automod_block_invites"] = block_invites
+                    settings["automod_action"] = action
+                    settings["automod_log_channel"] = log_channel_id
+                    settings["automod_mute_role"] = mute_role_id
+                    save_settings(settings)
+                    _show_toast("Automod-Einstellungen gespeichert!")
 
         elif page == "Server Tools":
             render_page_header("Server Tools", "Moderationstools für den RP-Alltag: Slowmode, Lock/Unlock, Timeout.")
