@@ -2974,14 +2974,26 @@ else:
 
         elif page == "Logging":
             render_page_header("Protokolle", "Aktiviere Logs und wähle den Ziel-Kanal.")
-            logging_enabled = st.toggle("Protokolle aktivieren", value=settings.get("logging_enabled", True))
-            logging_channel_id = select_channel_id("Log-Kanal", channels_map, settings.get("logging_channel_id"), "logging_channel")
-            
-            if st.button("Protokolle speichern"):
+            current_logging_enabled = bool(settings.get("logging_enabled", True))
+            logging_enabled = st.toggle("Protokolle aktivieren?", value=current_logging_enabled, key="logging_enabled_gate")
+
+            # 2 layer funktion: status first, settings only when enabled.
+            if logging_enabled != current_logging_enabled:
                 settings["logging_enabled"] = logging_enabled
-                settings["logging_channel_id"] = logging_channel_id
                 save_settings(settings)
-                _show_toast("Protokolle gespeichert!")
+                _show_toast("Protokolle aktiviert." if logging_enabled else "Protokolle deaktiviert.")
+                st.rerun()
+
+            if not logging_enabled:
+                st.caption("Protokolle sind deaktiviert.")
+            else:
+                logging_channel_id = select_channel_id("Log-Kanal", channels_map, settings.get("logging_channel_id"), "logging_channel")
+
+                if st.button("Protokolle speichern"):
+                    settings["logging_enabled"] = logging_enabled
+                    settings["logging_channel_id"] = logging_channel_id
+                    save_settings(settings)
+                    _show_toast("Protokolle gespeichert!")
 
         elif page == "Einstellungen":
             render_page_header("Allgemeine Einstellungen", "Globale Basiswerte für Kern-Module.")
