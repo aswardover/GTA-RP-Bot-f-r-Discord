@@ -6,3 +6,4 @@ __pycache__
 bot_data.db
 bot_runtime.json
 discord_data.json
+settings.json
