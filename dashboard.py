@@ -3122,22 +3122,12 @@ else:
                     _show_toast("Protokolle gespeichert!")
 
         elif page == "Einstellungen":
-            render_page_header("Allgemeine Einstellungen", "Globale Basiswerte für Kern-Module.")
+            render_page_header("Einstellungen", "Dashboard-Zugriff und Server-Konfiguration.")
             active_server_label = st.session_state.get("active_server_label", settings.get("dashboard_server_name", "ASWARD Server"))
             active_server_key = st.session_state.get("active_server_key", "default")
             st.info(f"Aktiver Server-Kontext: {active_server_label}")
 
-            st.subheader("Basis-Einstellungen")
-            automod_enabled = st.toggle("Automod global aktivieren", value=settings.get("automod_enabled", False))
-            
-            if st.button("Speichern"):
-                settings["automod_enabled"] = automod_enabled
-                save_settings(settings)
-                _show_toast("Einstellungen gespeichert!")
-                st.rerun()  # Seite neu laden, um Navigation zu aktualisieren
-
-            st.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
-            st.subheader("Dashboard-Zugriff pro Server")
+            st.subheader("Dashboard-Zugriff")
             current_allowed_ids = sorted(list(_allowed_ids_for_server(raw_settings, active_server_key)))
             if is_root_admin:
                 allowed_input = st.text_input(
