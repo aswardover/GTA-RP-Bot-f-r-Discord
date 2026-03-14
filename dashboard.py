@@ -27,8 +27,8 @@ DISCORD_USER_URL = "https://discord.com/api/users/@me"
 
 # --- STYLING (angepasst an Logo) ---
 st.set_page_config(
-    page_title="GTA RP Bot Dashboard",
-    page_icon="🎮",
+    page_title="Bot-Dashboard",
+    page_icon="📺",
     layout="wide",
     initial_sidebar_state="expanded",
 )
