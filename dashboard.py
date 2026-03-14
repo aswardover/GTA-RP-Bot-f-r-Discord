@@ -2294,11 +2294,31 @@ else:
                     )
                     _cur_embed_color = panel.get("embed_color", "#38bdf8")
                     _picker_val = _cur_embed_color if isinstance(_cur_embed_color, str) and _cur_embed_color.startswith("#") and len(_cur_embed_color) == 7 else "#38bdf8"
+                    _picker_key = "stempeluhr_editor_color_picker"
+                    _input_key = "stempeluhr_editor_embed_color"
+
+                    if _picker_key not in st.session_state:
+                        st.session_state[_picker_key] = _picker_val
+                    if _input_key not in st.session_state:
+                        st.session_state[_input_key] = st.session_state[_picker_key]
+
+                    def _on_stempeluhr_picker_change():
+                        st.session_state[_input_key] = st.session_state[_picker_key]
+
+                    def _on_stempeluhr_text_change():
+                        value = str(st.session_state.get(_input_key) or "").strip()
+                        if value.startswith("#") and len(value) == 7:
+                            try:
+                                int(value[1:], 16)
+                                st.session_state[_picker_key] = value
+                            except ValueError:
+                                pass
+
                     _ec1, _ec2 = st.columns([1, 5])
                     with _ec1:
-                        _picked_color = st.color_picker("Farbe", value=_picker_val, key="stempeluhr_editor_color_picker")
+                        _picked_color = st.color_picker("Farbe", value=_picker_val, key=_picker_key, on_change=_on_stempeluhr_picker_change)
                     with _ec2:
-                        embed_color = st.text_input("Hex-Farbe", value=_picked_color, key="stempeluhr_editor_embed_color")
+                        embed_color = st.text_input("Hex-Farbe", value=_picked_color, key=_input_key, on_change=_on_stempeluhr_text_change)
                     embed_footer = st.text_input(
                         "Footer",
                         value=str(panel.get("embed_footer", "")),
