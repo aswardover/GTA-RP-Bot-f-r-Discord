@@ -711,8 +711,7 @@ def render_embed_designer(settings, key_prefix, title_default, desc_default, col
         st.session_state[picker_key] = current_setting if isinstance(current_setting, str) and current_setting.startswith("#") and len(current_setting) == 7 else "#2b2d42"
     
     def on_picker_change():
-        # Update text input logic is handled by 'value=st.session_state[picker_key]' on rerun
-        pass
+        st.session_state[input_key] = st.session_state[picker_key]
 
     def on_text_change():
         # Update picker if valid hex
@@ -750,8 +749,7 @@ def embed_config_block(settings, key_prefix, title_default, desc_default, color_
         st.session_state[picker_key] = picker_default
 
     def on_picker_change():
-        # Input is bound to picker state via value=picked.
-        pass
+        st.session_state[input_key] = st.session_state[picker_key]
 
     def on_text_change():
         value = str(st.session_state.get(input_key) or "").strip()
@@ -2616,11 +2614,27 @@ else:
                 
                 current_rr_color = panel.get("color", "#8a2be2")
                 picker_val = current_rr_color if isinstance(current_rr_color, str) and current_rr_color.startswith("#") and len(current_rr_color) == 7 else "#8a2be2"
+
+                if "rr_picker" not in st.session_state:
+                    st.session_state["rr_picker"] = picker_val
+
+                def _on_rr_picker_change():
+                    st.session_state["rr_color"] = st.session_state["rr_picker"]
+
+                def _on_rr_text_change():
+                    value = str(st.session_state.get("rr_color") or "").strip()
+                    if value.startswith("#") and len(value) == 7:
+                        try:
+                            int(value[1:], 16)
+                            st.session_state["rr_picker"] = value
+                        except ValueError:
+                            pass
+
                 ec1, ec2 = st.columns([1, 5])
                 with ec1:
-                    picked = st.color_picker("Farbe", value=picker_val, key="rr_picker")
+                    picked = st.color_picker("Farbe", key="rr_picker", on_change=_on_rr_picker_change)
                 with ec2:
-                    color = st.text_input("Embed Farbe (Hex)", value=picked, key="rr_color")
+                    color = st.text_input("Embed Farbe (Hex)", value=picked, key="rr_color", on_change=_on_rr_text_change)
 
                 rr_send_as_embed = st.toggle("Panel als Embed senden", value=bool(panel.get("send_as_embed", True)), key="rr_send_as_embed")
 
