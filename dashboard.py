@@ -4,26 +4,45 @@ import streamlit.components.v1 as components
 import json
 import os
 import datetime
-import requests
 import discord
 import html
 from copy import deepcopy
-from urllib.parse import urlencode
-from config import SETTINGS_FILE, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DASHBOARD_REDIRECT_URI
+from config import SETTINGS_FILE
+
+# ── Utils ────────────────────────────────────────────────────────
+from utils.helpers import (
+    parse_id_list, names_for_ids, index_for_value,
+    _normalize_custom_command, _normalize_if_rule, _normalize_reaction_panel,
+    _normalize_server_key, normalize_named_mapping,
+    add_ids_from_settings, extract_ticket_category_names,
+    add_ticket_categories_from_settings,
+    _guild_stats_for_selected, _guild_members_for_selected,
+)
+from utils.settings_io import (
+    DISCORD_DATA_FILE, TICKETS_STATE_FILE,
+    _safe_read_json, _write_raw_settings,
+    load_settings, save_settings,
+    load_discord_data, save_discord_data,
+    load_reaction_roles, save_reaction_roles,
+    request_discord_data_sync, _discord_data_age_seconds,
+    _auto_sync_discord_data_if_needed,
+    _register_dashboard_server, _build_server_entries,
+    _effective_settings_for_server, _allowed_ids_for_server,
+    _set_allowed_ids_for_server, _live_ticket_count_for_selected,
+)
+from utils.audit import (
+    AUDIT_LOG_FILE,
+    _append_audit_entry, _read_audit_entries,
+    _push_undo_snapshot, _pop_undo_snapshot,
+)
+from utils.oauth import (
+    oauth_is_configured, get_discord_auth_url, get_bot_invite_url,
+    exchange_code_for_token, get_user_info,
+)
 
 # --- KONFIGURATION ---
-DISCORD_DATA_FILE = "discord_data.json"
-TICKETS_STATE_FILE = "tickets_state.json"
-AUDIT_LOG_FILE = "dashboard_audit.json"
 BOT_RUNTIME_FILE = "bot_runtime.json"
 ADMIN_ID = "202768068617699328" # Deine Discord ID
-AUTO_SYNC_STALE_AFTER_SECONDS = 60
-AUTO_SYNC_COOLDOWN_SECONDS = 45
-
-# Discord OAuth2 URLs
-DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
-DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
-DISCORD_USER_URL = "https://discord.com/api/users/@me"
 
 # --- STYLING (angepasst an Logo) ---
 st.set_page_config(
@@ -427,28 +446,6 @@ def _bot_runtime_status():
     except Exception:
         return {"online": online_flag, "last_seen": last_seen}
 
-def _guild_members_for_selected(discord_data, server_entry):
-    guild_id = str((server_entry or {}).get("guild_id") or "").strip()
-    raw_guilds = discord_data.get("guilds", []) if isinstance(discord_data, dict) else []
-    if not isinstance(raw_guilds, list):
-        return []
-
-    def _extract_members(guild):
-        members = guild.get("members", []) if isinstance(guild, dict) else []
-        return members if isinstance(members, list) else []
-
-    if guild_id:
-        for guild in raw_guilds:
-            if isinstance(guild, dict) and str(guild.get("id") or guild.get("guild_id") or "").strip() == guild_id:
-                return _extract_members(guild)
-
-    label = str((server_entry or {}).get("label") or "").strip().lower()
-    if label:
-        for guild in raw_guilds:
-            if isinstance(guild, dict) and str(guild.get("name") or guild.get("guild_name") or "").strip().lower() == label:
-                return _extract_members(guild)
-    return []
-
 def _render_member_copy_list(members):
     if not members:
         st.info("Keine Mitgliederdaten verfügbar. Bot muss online sein und Daten exportieren.")
@@ -625,81 +622,6 @@ def _enable_overview_autorefresh(interval_ms=8000):
         height=0,
     )
 
-def load_reaction_roles():
-    if os.path.exists("reaction_roles.json"):
-        with open("reaction_roles.json", 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {}
-
-def save_reaction_roles(data):
-    with open("reaction_roles.json", 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
-
-def _safe_read_json(path, fallback):
-    if not os.path.exists(path):
-        return deepcopy(fallback)
-    
-    # Simple retry mechanism for file locking/concurrency issues
-    import time
-    for i in range(3):
-        try:
-            with open(path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError, IOError):
-            if i < 2:
-                time.sleep(0.1)
-                continue
-            return deepcopy(fallback)
-    return deepcopy(fallback)
-
-def _append_audit_entry(module, action, details=None, status="ok"):
-    entries = _safe_read_json(AUDIT_LOG_FILE, [])
-    if not isinstance(entries, list):
-        entries = []
-
-    actor_id = str(st.session_state.get("user_id") or "unknown")
-    server_key = str(st.session_state.get("active_server_key") or "default")
-    server_label = str(st.session_state.get("active_server_label") or "-")
-    entry = {
-        "ts": datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
-        "module": str(module),
-        "action": str(action),
-        "status": str(status),
-        "server_key": server_key,
-        "server_label": server_label,
-        "actor_id": actor_id,
-        "details": str(details or ""),
-    }
-    entries.insert(0, entry)
-    entries = entries[:500]
-    with open(AUDIT_LOG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(entries, f, indent=2, ensure_ascii=False)
-
-def _read_audit_entries(server_key=None, limit=100):
-    entries = _safe_read_json(AUDIT_LOG_FILE, [])
-    if not isinstance(entries, list):
-        return []
-    if server_key:
-        entries = [e for e in entries if isinstance(e, dict) and str(e.get("server_key")) == str(server_key)]
-    return entries[:max(1, int(limit))]
-
-def _push_undo_snapshot(settings, snapshot_key, payload):
-    undo_root = settings.get("dashboard_undo", {}) if isinstance(settings.get("dashboard_undo"), dict) else {}
-    stack = undo_root.get(snapshot_key, []) if isinstance(undo_root.get(snapshot_key), list) else []
-    stack.append(deepcopy(payload))
-    undo_root[snapshot_key] = stack[-5:]
-    settings["dashboard_undo"] = undo_root
-
-def _pop_undo_snapshot(settings, snapshot_key):
-    undo_root = settings.get("dashboard_undo", {}) if isinstance(settings.get("dashboard_undo"), dict) else {}
-    stack = undo_root.get(snapshot_key, []) if isinstance(undo_root.get(snapshot_key), list) else []
-    if not stack:
-        return None
-    payload = stack.pop()
-    undo_root[snapshot_key] = stack
-    settings["dashboard_undo"] = undo_root
-    return payload
-
 def _preview_text(template_text, channel_hint="#channel"):
     text = str(template_text or "")
     return (
@@ -707,420 +629,6 @@ def _preview_text(template_text, channel_hint="#channel"):
         .replace("{server}", str(st.session_state.get("active_server_label") or "Server"))
         .replace("{channel}", channel_hint)
     )
-
-def _normalize_custom_command(raw):
-    item = raw if isinstance(raw, dict) else {}
-    return {
-        "name": str(item.get("name", "")).strip(),
-        "response": str(item.get("response", "")).strip(),
-        "send_as_embed": bool(item.get("send_as_embed", True)),
-        "target_channel_id": str(item.get("target_channel_id", "") or "").strip(),
-        "allowed_roles": [str(x) for x in (item.get("allowed_roles", []) if isinstance(item.get("allowed_roles"), list) else []) if str(x).strip()],
-    }
-
-def _normalize_if_rule(raw):
-    item = raw if isinstance(raw, dict) else {}
-    event = str(item.get("event", "role_add"))
-    if event not in ("role_add", "role_remove"):
-        event = "role_add"
-    return {
-        "event": event,
-        "role": str(item.get("role", "")).strip(),
-        "action": "send_message",
-        "channel": str(item.get("channel", "")).strip(),
-        "message": str(item.get("message", "")).strip(),
-        "send_as_embed": bool(item.get("send_as_embed", False)),
-        "allowed_roles": [str(x) for x in (item.get("allowed_roles", []) if isinstance(item.get("allowed_roles"), list) else []) if str(x).strip()],
-    }
-
-def _normalize_reaction_panel(raw, idx=0):
-    item = raw if isinstance(raw, dict) else {}
-    base_items = item.get("items", []) if isinstance(item.get("items"), list) else []
-    cleaned_items = []
-    for sub in base_items:
-        if not isinstance(sub, dict):
-            continue
-        emoji = str(sub.get("emoji", "")).strip()
-        role_id = str(sub.get("role_id", "")).strip()
-        if emoji and role_id:
-            cleaned_items.append({"emoji": emoji, "role_id": role_id})
-    return {
-        "name": str(item.get("name", f"Reaktionsrollen Panel {idx + 1}")).strip() or f"Reaktionsrollen Panel {idx + 1}",
-        "enabled": bool(item.get("enabled", False)),
-        "channel_id": str(item.get("channel_id", "")).strip(),
-        "title": str(item.get("title", "Wähle deine Rollen")).strip() or "Wähle deine Rollen",
-        "description": str(item.get("description", "Reagiere mit Emojis um Rollen zu bekommen.")).strip() or "Reagiere mit Emojis um Rollen zu bekommen.",
-        "color": str(item.get("color", "#8a2be2")).strip() or "#8a2be2",
-        "send_as_embed": bool(item.get("send_as_embed", True)),
-        "items": cleaned_items,
-        "allowed_roles": [str(x) for x in (item.get("allowed_roles", []) if isinstance(item.get("allowed_roles"), list) else []) if str(x).strip()],
-    }
-
-@st.cache_data(ttl=3)
-def _load_settings_cached(version_token):
-    return _safe_read_json(SETTINGS_FILE, {})
-
-@st.cache_data(ttl=10)
-def _load_discord_data_cached(version_token):
-    return _safe_read_json(DISCORD_DATA_FILE, {"channels": {}, "roles": {}, "categories": {}, "guilds": []})
-
-def _settings_version_token():
-    try:
-        return int(os.path.getmtime(SETTINGS_FILE))
-    except OSError:
-        return 0
-
-def _discord_version_token():
-    try:
-        return int(os.path.getmtime(DISCORD_DATA_FILE))
-    except OSError:
-        return 0
-
-def _normalize_server_key(value):
-    key = str(value or "default").strip().lower()
-    cleaned = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in key)
-    cleaned = "-".join([part for part in cleaned.split("-") if part])
-    return cleaned or "default"
-
-def _write_raw_settings(raw_settings):
-    with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(raw_settings, f, indent=4, ensure_ascii=False)
-    _load_settings_cached.clear()
-
-def _register_dashboard_server(server_name, guild_id=None):
-    label = str(server_name or "").strip()
-    if not label:
-        return None
-    guild_id_str = str(guild_id or "").strip()
-    server_key = _normalize_server_key(guild_id_str or label)
-
-    raw_settings = _safe_read_json(SETTINGS_FILE, {})
-    servers = raw_settings.get("dashboard_servers", [])
-    if not isinstance(servers, list):
-        servers = []
-
-    updated = False
-    for item in servers:
-        if isinstance(item, dict) and _normalize_server_key(item.get("key") or item.get("guild_id") or item.get("label")) == server_key:
-            item["label"] = label
-            item["guild_id"] = guild_id_str
-            item["key"] = server_key
-            updated = True
-            break
-
-    if not updated:
-        servers.append({"label": label, "guild_id": guild_id_str, "key": server_key})
-
-    raw_settings["dashboard_servers"] = servers
-    profiles = raw_settings.get("server_profiles", {})
-    if not isinstance(profiles, dict):
-        profiles = {}
-    if server_key not in profiles:
-        profiles[server_key] = {}
-    raw_settings["server_profiles"] = profiles
-    _write_raw_settings(raw_settings)
-    return server_key
-
-def _build_server_entries(discord_data, settings):
-    entries = []
-    raw_guilds = discord_data.get("guilds", []) if isinstance(discord_data, dict) else []
-    if isinstance(raw_guilds, dict):
-        for name, gid in raw_guilds.items():
-            label = str(name).strip() or f"Server {gid}"
-            gid_str = str(gid).strip()
-            entries.append({"label": label, "key": _normalize_server_key(gid_str or label), "guild_id": gid_str})
-    elif isinstance(raw_guilds, list):
-        for item in raw_guilds:
-            if isinstance(item, dict):
-                label = str(item.get("name") or item.get("guild_name") or item.get("label") or "").strip()
-                gid = str(item.get("id") or item.get("guild_id") or "").strip()
-                if label or gid:
-                    entries.append({"label": label or f"Server {gid}", "key": _normalize_server_key(gid or label), "guild_id": gid})
-            elif isinstance(item, str) and item.strip():
-                label = item.strip()
-                entries.append({"label": label, "key": _normalize_server_key(label), "guild_id": ""})
-
-    manual_servers = settings.get("dashboard_servers", []) if isinstance(settings, dict) else []
-    if isinstance(manual_servers, list):
-        for item in manual_servers:
-            if isinstance(item, dict):
-                label = str(item.get("label") or "").strip()
-                gid = str(item.get("guild_id") or "").strip()
-                key = str(item.get("key") or "").strip()
-                if label or gid or key:
-                    entries.append(
-                        {
-                            "label": label or f"Server {gid}" if gid else "Neuer Server",
-                            "key": _normalize_server_key(key or gid or label),
-                            "guild_id": gid,
-                        }
-                    )
-
-    if not entries:
-        fallback_name = str(settings.get("dashboard_server_name", "ASWARD Server")).strip() or "ASWARD Server"
-        entries = [{"label": fallback_name, "key": "default", "guild_id": ""}]
-
-    unique = {}
-    for entry in entries:
-        unique[entry["key"]] = entry
-    return list(unique.values())
-
-def _effective_settings_for_server(raw_settings, server_key):
-    effective = deepcopy(raw_settings) if isinstance(raw_settings, dict) else {}
-    profiles = raw_settings.get("server_profiles", {}) if isinstance(raw_settings, dict) else {}
-    profile = profiles.get(server_key, {}) if isinstance(profiles, dict) else {}
-    if isinstance(profile, dict):
-        effective.update(deepcopy(profile))
-    return effective
-
-def _allowed_ids_for_server(raw_settings, server_key):
-    profiles = raw_settings.get("server_profiles", {}) if isinstance(raw_settings, dict) else {}
-    profile = profiles.get(server_key, {}) if isinstance(profiles, dict) else {}
-    allowed = profile.get("dashboard_allowed_users", []) if isinstance(profile, dict) else []
-    return {str(x).strip() for x in allowed if str(x).strip()}
-
-def _set_allowed_ids_for_server(server_key, allowed_ids):
-    raw_settings = _safe_read_json(SETTINGS_FILE, {})
-    profiles = raw_settings.get("server_profiles", {})
-    if not isinstance(profiles, dict):
-        profiles = {}
-    profile = profiles.get(server_key, {})
-    if not isinstance(profile, dict):
-        profile = {}
-    profile["dashboard_allowed_users"] = [str(x).strip() for x in (allowed_ids or []) if str(x).strip()]
-    profiles[server_key] = profile
-    raw_settings["server_profiles"] = profiles
-    _write_raw_settings(raw_settings)
-
-def _guild_stats_for_selected(discord_data, server_entry):
-    guild_id = str((server_entry or {}).get("guild_id") or "").strip()
-    raw_guilds = discord_data.get("guilds", []) if isinstance(discord_data, dict) else []
-    if not isinstance(raw_guilds, list):
-        return {"member_count": 0, "online_count": 0}
-
-    if guild_id:
-        for guild in raw_guilds:
-            if isinstance(guild, dict) and str(guild.get("id") or guild.get("guild_id") or "").strip() == guild_id:
-                return {
-                    "member_count": int(guild.get("member_count") or 0),
-                    "online_count": int(guild.get("online_count") or 0),
-                }
-
-    label = str((server_entry or {}).get("label") or "").strip().lower()
-    if label:
-        for guild in raw_guilds:
-            if isinstance(guild, dict) and str(guild.get("name") or guild.get("guild_name") or "").strip().lower() == label:
-                return {
-                    "member_count": int(guild.get("member_count") or 0),
-                    "online_count": int(guild.get("online_count") or 0),
-                }
-    return {"member_count": 0, "online_count": 0}
-
-def _live_ticket_count_for_selected(server_entry):
-    state = _safe_read_json(TICKETS_STATE_FILE, {})
-    if not isinstance(state, dict):
-        return 0
-    guild_id = str((server_entry or {}).get("guild_id") or "").strip()
-    if not guild_id:
-        return len(state)
-    return sum(
-        1
-        for info in state.values()
-        if isinstance(info, dict) and str(info.get("guild_id") or "").strip() == guild_id
-    )
-
-def load_settings():
-    return _load_settings_cached(_settings_version_token())
-
-def save_settings(settings):
-    active_server_key = st.session_state.get("active_server_key")
-    payload = deepcopy(settings) if isinstance(settings, dict) else {}
-
-    if active_server_key:
-        raw_settings = _safe_read_json(SETTINGS_FILE, {})
-        profiles = raw_settings.get("server_profiles", {})
-        if not isinstance(profiles, dict):
-            profiles = {}
-
-        profile_data = deepcopy(payload)
-        profile_data.pop("server_profiles", None)
-        profiles[active_server_key] = profile_data
-
-        merged = deepcopy(raw_settings)
-        merged.update(profile_data)
-        merged["server_profiles"] = profiles
-        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(merged, f, indent=4, ensure_ascii=False)
-    else:
-        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(payload, f, indent=4, ensure_ascii=False)
-
-    _load_settings_cached.clear()
-
-def load_discord_data():
-    return _load_discord_data_cached(_discord_version_token())
-
-def save_discord_data(data):
-    with open(DISCORD_DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
-    _load_discord_data_cached.clear()
-
-def request_discord_data_sync():
-    """Setzt ein Trigger-Flag, das der laufende Bot verarbeitet und danach discord_data.json aktualisiert."""
-    settings = load_settings()
-    settings["discord_data_sync_trigger"] = True
-    save_settings(settings)
-    return True, "Sync angefordert. In wenigen Sekunden sind Channels/Kategorien aktualisiert."
-
-def _discord_data_age_seconds(discord_data):
-    if not isinstance(discord_data, dict):
-        return None
-    meta = discord_data.get("meta", {})
-    if not isinstance(meta, dict):
-        return None
-    exported_at = str(meta.get("exported_at") or "").strip()
-    if not exported_at:
-        return None
-    try:
-        ts = datetime.datetime.fromisoformat(exported_at.replace("Z", "+00:00"))
-    except Exception:
-        return None
-    now = datetime.datetime.now(datetime.timezone.utc)
-    return max(0.0, (now - ts).total_seconds())
-
-def _auto_sync_discord_data_if_needed(
-    discord_data,
-    stale_after_seconds=AUTO_SYNC_STALE_AFTER_SECONDS,
-    cooldown_seconds=AUTO_SYNC_COOLDOWN_SECONDS,
-):
-    age_seconds = _discord_data_age_seconds(discord_data)
-    is_stale = age_seconds is None or age_seconds >= float(stale_after_seconds)
-
-    now_ts = datetime.datetime.now(datetime.timezone.utc).timestamp()
-    last_request_ts = float(st.session_state.get("dashboard_last_auto_sync_request_ts", 0.0) or 0.0)
-    in_cooldown = (now_ts - last_request_ts) < float(cooldown_seconds)
-
-    requested = False
-    if is_stale and not in_cooldown:
-        ok, _ = request_discord_data_sync()
-        if ok:
-            st.session_state.dashboard_last_auto_sync_request_ts = now_ts
-            requested = True
-
-    return {
-        "requested": requested,
-        "age_seconds": age_seconds,
-        "is_stale": is_stale,
-    }
-
-def normalize_named_mapping(raw):
-    """Normalisiert Discord-Daten auf Name->ID Mapping (dict), auch wenn Listen gespeichert wurden."""
-    if isinstance(raw, dict):
-        return {str(k): str(v) for k, v in raw.items()}
-    if isinstance(raw, list):
-        result = {}
-        for item in raw:
-            if isinstance(item, dict):
-                name = item.get("name") or item.get("label") or item.get("title")
-                value = item.get("id") or item.get("value")
-                if name is not None and value is not None:
-                    result[str(name)] = str(value)
-            elif isinstance(item, (list, tuple)) and len(item) == 2:
-                result[str(item[0])] = str(item[1])
-            elif isinstance(item, (str, int)):
-                value = str(item)
-                if value:
-                    result[f"ID {value}"] = value
-        return result
-    return {}
-
-def add_ids_from_settings(mapping, settings, keys, label_prefix):
-    """Fuegt bekannte IDs aus settings hinzu, damit Dropdowns auch ohne discord_data nutzbar sind."""
-    enriched = dict(mapping)
-    existing_values = set(str(v) for v in enriched.values())
-    for key in keys:
-        value = settings.get(key)
-        if value is None:
-            continue
-        value_str = str(value).strip()
-        if not value_str:
-            continue
-        if value_str not in existing_values:
-            enriched[f"{label_prefix}: {key} ({value_str})"] = value_str
-            existing_values.add(value_str)
-    return enriched
-
-def extract_ticket_category_names(raw_categories, categories_mapping):
-    """Extrahiert Category-Namen fuer Multiselect (kompatibel mit alter und neuer Struktur)."""
-    if not isinstance(raw_categories, list):
-        return []
-    reverse_map = {str(v): k for k, v in categories_mapping.items()}
-    names = []
-    for item in raw_categories:
-        if isinstance(item, str):
-            if item in categories_mapping:
-                names.append(item)
-            elif item in reverse_map:
-                names.append(reverse_map[item])
-        elif isinstance(item, dict):
-            category_id = item.get("category_channel_id")
-            name = item.get("name")
-            if category_id is not None and str(category_id) in reverse_map:
-                names.append(reverse_map[str(category_id)])
-            elif name and name in categories_mapping:
-                names.append(name)
-    return list(dict.fromkeys(names))
-
-def add_ticket_categories_from_settings(categories_mapping, settings):
-    """Ergaenzt Kategorien aus tickets_categories in die Auswahl (falls keine discord_data Kategorien vorliegen)."""
-    enriched = dict(categories_mapping)
-    existing_values = set(str(v) for v in enriched.values())
-    raw_categories = settings.get("tickets_categories", [])
-    if not isinstance(raw_categories, list):
-        return enriched
-
-    for item in raw_categories:
-        if isinstance(item, dict):
-            category_id = item.get("category_channel_id")
-            name = item.get("name") or "Kategorie"
-            if category_id is None:
-                continue
-            category_id_str = str(category_id)
-            if category_id_str not in existing_values:
-                enriched[f"{name} ({category_id_str})"] = category_id_str
-                existing_values.add(category_id_str)
-        elif isinstance(item, str):
-            if item not in enriched:
-                enriched[item] = item
-    return enriched
-
-def index_for_value(mapping, current_value):
-    if not mapping:
-        return 0
-    values = list(mapping.values())
-    for i, val in enumerate(values):
-        if str(val) == str(current_value):
-            return i
-    return 0
-
-def parse_id_list(raw_value):
-    """Parst komma-separierte IDs in eindeutige String-Liste."""
-    if not raw_value:
-        return []
-    ids = []
-    seen = set()
-    for part in str(raw_value).split(","):
-        value = part.strip()
-        if not value or value in seen:
-            continue
-        ids.append(value)
-        seen.add(value)
-    return ids
-
-def names_for_ids(mapping, id_list):
-    """Mappt IDs auf bekannte Namen fuer Default-Werte in Multiselects."""
-    reverse_map = {str(v): k for k, v in mapping.items()}
-    return [reverse_map[str(item)] for item in (id_list or []) if str(item) in reverse_map]
 
 def select_role_id(label, roles_mapping, current_value, key_prefix, allow_manual_input=True):
     """Returns a role ID string from dropdown options."""
@@ -1338,56 +846,6 @@ def select_category_id(label, categories_mapping, current_value, key_prefix, all
         if manual_id:
             return manual_id
     return selected_id
-
-# --- OAUTH2 HILFSFUNKTIONEN ---
-def oauth_is_configured():
-    client_id = str(DISCORD_CLIENT_ID or "").strip()
-    client_secret = str(DISCORD_CLIENT_SECRET or "").strip()
-    if not client_id or client_id.startswith("YOUR_"):
-        return False
-    if not client_secret or client_secret.startswith("YOUR_"):
-        return False
-    if not client_id.isdigit():
-        return False
-    return True
-
-def get_discord_auth_url():
-    params = {
-        "client_id": DISCORD_CLIENT_ID,
-        "redirect_uri": DASHBOARD_REDIRECT_URI,
-        "response_type": "code",
-        "scope": "identify"
-    }
-    url = DISCORD_AUTH_URL + "?" + urlencode(params)
-    return url
-
-def get_bot_invite_url(guild_id=None, permissions="8", disable_guild_select=False):
-    params = {
-        "client_id": DISCORD_CLIENT_ID,
-        "scope": "bot applications.commands",
-        "permissions": str(permissions or "8"),
-    }
-    guild_id_str = str(guild_id or "").strip()
-    if guild_id_str:
-        params["guild_id"] = guild_id_str
-        params["disable_guild_select"] = "true" if disable_guild_select else "false"
-    return f"https://discord.com/oauth2/authorize?{urlencode(params)}"
-
-def exchange_code_for_token(code):
-    data = {
-        "client_id": DISCORD_CLIENT_ID,
-        "client_secret": DISCORD_CLIENT_SECRET,
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": DASHBOARD_REDIRECT_URI
-    }
-    response = requests.post(DISCORD_TOKEN_URL, data=data)
-    return response.json()
-
-def get_user_info(access_token):
-    headers = {"Authorization": f"Bearer {access_token}"}
-    response = requests.get(DISCORD_USER_URL, headers=headers)
-    return response.json()
 
 # --- SESSION STATE ---
 if "logged_in" not in st.session_state:
