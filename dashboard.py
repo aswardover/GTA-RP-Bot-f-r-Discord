@@ -769,6 +769,10 @@ def embed_config_block(settings, key_prefix, title_default, desc_default, color_
         color = st.text_input("Farbe (Hex)", value=picked, key=input_key, on_change=on_text_change)
 
     footer = st.text_input("Footer", value=settings.get(f"{key_prefix}_footer", footer_default), key=f"{key_prefix}_footer_input")
+
+    with st.expander("Live-Vorschau", expanded=False):
+        _render_embed_preview(title, _preview_text(description, f"#{key_prefix}"), _preview_text(footer, f"#{key_prefix}"))
+
     return title, description, color, footer
 
 def select_channel_id(label, channels_mapping, current_value, key_prefix, allow_manual_input=True):
@@ -1283,37 +1287,58 @@ else:
                     delete_from_overview = st.button("Markierte löschen", type="secondary")
 
                 if delete_from_overview:
+                    has_marked = any(st.session_state.get(f"ticket_delete_mark_{i}", False) for i in range(len(ticket_panels)))
+                    if not has_marked:
+                        st.warning("Kein Panel zum Löschen markiert.")
+                    elif not st.session_state.get("ticket_confirm_delete_overview", False):
+                        st.session_state.ticket_confirm_delete_overview = True
+                        st.rerun()
+
+                if st.session_state.get("ticket_confirm_delete_overview", False):
+                    st.warning("Wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.")
+                    c_yes, c_no = st.columns(2)
+                    with c_yes:
+                        if st.button("Ja, löschen", key="ticket_confirm_yes", type="primary"):
+                            st.session_state.ticket_confirm_delete_overview = False
+                            remaining_panels = []
+                            for idx, panel_item in enumerate(ticket_panels):
+                                if not st.session_state.get(f"ticket_delete_mark_{idx}", False):
+                                    remaining_panels.append(panel_item)
+                            ticket_panels = remaining_panels
+                            settings["ticket_panels"] = ticket_panels
+                            if not ticket_panels:
+                                settings["tickets_enabled"] = False
+                                settings["ticket_channel_id"] = ""
+                                settings["tickets_panel_channel_id"] = ""
+                                settings["tickets_panel_mode"] = "buttons"
+                                settings["tickets_panel_name"] = "Neues Ticket-Panel"
+                                settings["tickets_panel_title"] = "🎫 Ticket-System"
+                                settings["tickets_panel_description"] = "Wähle eine Option, um ein Ticket zu erstellen."
+                                settings["tickets_categories"] = []
+                                settings["tickets_manager_roles"] = []
+                                settings["tickets_open_category_id"] = ""
+                                settings["tickets_claimed_category_id"] = ""
+                                settings["tickets_closed_category_id"] = ""
+                                settings["tickets_transcript_channel_id"] = ""
+                                settings["tickets_transcript_dm_enabled"] = False
+                                settings["tickets_delete_on_close"] = True
+                                settings["tickets_opened_message"] = "Dein Ticket wurde erstellt. Bitte gib alle zusätzlichen Informationen an."
+                                settings["tickets_publish_trigger"] = False
+                                st.session_state.tickets_selected_index = 0
+                            else:
+                                st.session_state.tickets_selected_index = min(st.session_state.tickets_selected_index, len(ticket_panels) - 1)
+                            save_settings(settings)
+                            st.session_state["toast_message"] = "Markierte Ticket-Panels wurden gelöscht."
+                            st.rerun()
+                    with c_no:
+                        if st.button("Abbrechen", key="ticket_confirm_no"):
+                            st.session_state.ticket_confirm_delete_overview = False
+                            st.rerun()
+                else:
                     remaining_panels = []
                     for idx, panel_item in enumerate(ticket_panels):
                         if not st.session_state.get(f"ticket_delete_mark_{idx}", False):
                             remaining_panels.append(panel_item)
-
-                    ticket_panels = remaining_panels
-                    settings["ticket_panels"] = ticket_panels
-                    if not ticket_panels:
-                        settings["tickets_enabled"] = False
-                        settings["ticket_channel_id"] = ""
-                        settings["tickets_panel_channel_id"] = ""
-                        settings["tickets_panel_mode"] = "buttons"
-                        settings["tickets_panel_name"] = "Neues Ticket-Panel"
-                        settings["tickets_panel_title"] = "🎫 Ticket-System"
-                        settings["tickets_panel_description"] = "Wähle eine Option, um ein Ticket zu erstellen."
-                        settings["tickets_categories"] = []
-                        settings["tickets_manager_roles"] = []
-                        settings["tickets_open_category_id"] = ""
-                        settings["tickets_claimed_category_id"] = ""
-                        settings["tickets_closed_category_id"] = ""
-                        settings["tickets_transcript_channel_id"] = ""
-                        settings["tickets_transcript_dm_enabled"] = False
-                        settings["tickets_delete_on_close"] = True
-                        settings["tickets_opened_message"] = "Dein Ticket wurde erstellt. Bitte gib alle zusätzlichen Informationen an."
-                        settings["tickets_publish_trigger"] = False
-                        st.session_state.tickets_selected_index = 0
-                    else:
-                        st.session_state.tickets_selected_index = min(st.session_state.tickets_selected_index, len(ticket_panels) - 1)
-                    save_settings(settings)
-                    st.session_state["toast_message"] = "Markierte Ticket-Panels wurden gelöscht."
-                    st.rerun()
 
                 with list_col:
                     for idx, panel in enumerate(ticket_panels):
@@ -1328,12 +1353,25 @@ else:
                                 unsafe_allow_html=True,
                             )
                         with row_action_col:
-                            if st.button(f"Bearbeiten", key=f"ticket_edit_btn_{idx}", use_container_width=True):
+                            if st.button("Bearbeiten", key=f"ticket_edit_btn_{idx}", use_container_width=True):
                                 st.session_state.tickets_selected_index = idx
                                 st.session_state.tickets_editor_snapshot = deepcopy(ticket_panels[idx])
                                 st.session_state.tickets_confirm_leave = False
                                 st.session_state.tickets_editor_open = True
                                 st.rerun()
+                            move_cols = st.columns(2)
+                            with move_cols[0]:
+                                if idx > 0 and st.button("▲", key=f"ticket_up_{idx}"):
+                                    ticket_panels[idx], ticket_panels[idx - 1] = ticket_panels[idx - 1], ticket_panels[idx]
+                                    settings["ticket_panels"] = ticket_panels
+                                    save_settings(settings)
+                                    st.rerun()
+                            with move_cols[1]:
+                                if idx < len(ticket_panels) - 1 and st.button("▼", key=f"ticket_down_{idx}"):
+                                    ticket_panels[idx], ticket_panels[idx + 1] = ticket_panels[idx + 1], ticket_panels[idx]
+                                    settings["ticket_panels"] = ticket_panels
+                                    save_settings(settings)
+                                    st.rerun()
                             st.checkbox("Löschen", key=f"ticket_delete_mark_{idx}")
 
                 st.subheader("Befehle")
@@ -1365,6 +1403,19 @@ else:
                     publish_btn = st.button("Veröffentlichen")
 
                 delete_btn = st.button("Panel jetzt löschen", type="secondary")
+                if delete_btn:
+                    st.session_state.tickets_confirm_delete = True
+                if st.session_state.get("tickets_confirm_delete", False):
+                    st.warning("Wirklich löschen? Alle Panel-Daten werden zurückgesetzt.")
+                    cd_yes, cd_no = st.columns(2)
+                    with cd_yes:
+                        delete_confirmed = st.button("Ja, Panel löschen", key="tickets_delete_confirm_yes", type="primary")
+                    with cd_no:
+                        if st.button("Abbrechen", key="tickets_delete_confirm_no"):
+                            st.session_state.tickets_confirm_delete = False
+                            st.rerun()
+                else:
+                    delete_confirmed = False
                 tickets_unsaved_notice = st.empty()
 
                 with st.expander("Allgemein", expanded=True):
@@ -1481,7 +1532,7 @@ else:
                     st.session_state["toast_message"] = "Änderungen verworfen." if discard_btn else "Zurück zur Übersicht."
                     st.rerun()
 
-                if delete_btn:
+                if delete_confirmed:
                     settings["ticket_panels"] = []
                     settings["tickets_enabled"] = False
                     settings["ticket_channel_id"] = ""
@@ -1623,26 +1674,43 @@ else:
                     delete_stempel_from_overview = st.button("Markierte löschen", key="stempeluhr_delete_marked", type="secondary")
 
                 if delete_stempel_from_overview:
-                    remaining_stempel = []
-                    for idx, panel_item in enumerate(stempel_panels):
-                        if not st.session_state.get(f"stempeluhr_delete_mark_{idx}", False):
-                            remaining_stempel.append(panel_item)
-                    stempel_panels = remaining_stempel
-                    settings["stempeluhr_panels"] = stempel_panels
-                    if not stempel_panels:
-                        settings["stempeluhr_enabled"] = False
-                        settings["stempel_ein_roles"] = []
-                        settings["stempel_aus_roles"] = []
-                        settings["stempeluhr_allowed_roles"] = []
-                        settings["stempeluhr_admin_roles"] = []
-                        settings["stempeluhr_panel_channel_id"] = ""
-                        settings["stempeluhr_panel_name"] = "Stempeluhr Panel"
-                        st.session_state.stempeluhr_selected_index = 0
-                    else:
-                        st.session_state.stempeluhr_selected_index = min(st.session_state.stempeluhr_selected_index, len(stempel_panels) - 1)
-                    save_settings(settings)
-                    st.session_state["toast_message"] = "Markierte Stempeluhr-Panels wurden gelöscht."
-                    st.rerun()
+                    has_marked = any(st.session_state.get(f"stempeluhr_delete_mark_{i}", False) for i in range(len(stempel_panels)))
+                    if not has_marked:
+                        st.warning("Kein Panel zum Löschen markiert.")
+                    elif not st.session_state.get("stempeluhr_confirm_delete_overview", False):
+                        st.session_state.stempeluhr_confirm_delete_overview = True
+                        st.rerun()
+
+                if st.session_state.get("stempeluhr_confirm_delete_overview", False):
+                    st.warning("Wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.")
+                    c_yes, c_no = st.columns(2)
+                    with c_yes:
+                        if st.button("Ja, löschen", key="stempeluhr_confirm_yes", type="primary"):
+                            st.session_state.stempeluhr_confirm_delete_overview = False
+                            remaining_stempel = []
+                            for idx, panel_item in enumerate(stempel_panels):
+                                if not st.session_state.get(f"stempeluhr_delete_mark_{idx}", False):
+                                    remaining_stempel.append(panel_item)
+                            stempel_panels = remaining_stempel
+                            settings["stempeluhr_panels"] = stempel_panels
+                            if not stempel_panels:
+                                settings["stempeluhr_enabled"] = False
+                                settings["stempel_ein_roles"] = []
+                                settings["stempel_aus_roles"] = []
+                                settings["stempeluhr_allowed_roles"] = []
+                                settings["stempeluhr_admin_roles"] = []
+                                settings["stempeluhr_panel_channel_id"] = ""
+                                settings["stempeluhr_panel_name"] = "Stempeluhr Panel"
+                                st.session_state.stempeluhr_selected_index = 0
+                            else:
+                                st.session_state.stempeluhr_selected_index = min(st.session_state.stempeluhr_selected_index, len(stempel_panels) - 1)
+                            save_settings(settings)
+                            st.session_state["toast_message"] = "Markierte Stempeluhr-Panels wurden gelöscht."
+                            st.rerun()
+                    with c_no:
+                        if st.button("Abbrechen", key="stempeluhr_confirm_no"):
+                            st.session_state.stempeluhr_confirm_delete_overview = False
+                            st.rerun()
 
                 with list_col:
                     for idx, panel in enumerate(stempel_panels):
@@ -1665,6 +1733,19 @@ else:
                                 st.session_state.stempeluhr_confirm_leave = False
                                 st.session_state.stempeluhr_editor_open = True
                                 st.rerun()
+                            move_cols = st.columns(2)
+                            with move_cols[0]:
+                                if idx > 0 and st.button("▲", key=f"stempeluhr_up_{idx}"):
+                                    stempel_panels[idx], stempel_panels[idx - 1] = stempel_panels[idx - 1], stempel_panels[idx]
+                                    settings["stempeluhr_panels"] = stempel_panels
+                                    save_settings(settings)
+                                    st.rerun()
+                            with move_cols[1]:
+                                if idx < len(stempel_panels) - 1 and st.button("▼", key=f"stempeluhr_down_{idx}"):
+                                    stempel_panels[idx], stempel_panels[idx + 1] = stempel_panels[idx + 1], stempel_panels[idx]
+                                    settings["stempeluhr_panels"] = stempel_panels
+                                    save_settings(settings)
+                                    st.rerun()
                             st.checkbox("Löschen", key=f"stempeluhr_delete_mark_{idx}")
 
                 st.subheader("Befehle")
@@ -1695,6 +1776,19 @@ else:
                     publish_btn = st.button("Veröffentlichen", key="stempeluhr_publish")
 
                 delete_btn = st.button("Panel jetzt löschen", key="stempeluhr_editor_delete", type="secondary")
+                if delete_btn:
+                    st.session_state.stempeluhr_confirm_delete = True
+                if st.session_state.get("stempeluhr_confirm_delete", False):
+                    st.warning("Wirklich löschen? Alle Panel-Daten werden zurückgesetzt.")
+                    cd_yes, cd_no = st.columns(2)
+                    with cd_yes:
+                        stempel_delete_confirmed = st.button("Ja, Panel löschen", key="stempeluhr_delete_confirm_yes", type="primary")
+                    with cd_no:
+                        if st.button("Abbrechen", key="stempeluhr_delete_confirm_no"):
+                            st.session_state.stempeluhr_confirm_delete = False
+                            st.rerun()
+                else:
+                    stempel_delete_confirmed = False
                 stempeluhr_unsaved_notice = st.empty()
 
                 with st.expander("Allgemein", expanded=True):
@@ -1835,7 +1929,7 @@ else:
                     st.session_state["toast_message"] = "Änderungen verworfen." if discard_btn else "Zurück zur Übersicht."
                     st.rerun()
 
-                if delete_btn:
+                if stempel_delete_confirmed:
                     settings["stempeluhr_panels"] = []
                     settings["stempeluhr_enabled"] = False
                     settings["stempel_ein_roles"] = []
@@ -2034,6 +2128,7 @@ else:
                         settings["if_rules_scope_roles"] = ifrules_scope_roles
                         save_settings(settings)
                         _append_audit_entry("Wenn-Funktionen", "Regel erstellt", f"Regeln: {len(custom_rules)}")
+                        _show_toast("Neue Regel erstellt.")
                         st.session_state.ifrules_selected_index = len(custom_rules) - 1
                         st.session_state.ifrules_editor_open = True
                         st.rerun()
@@ -2056,22 +2151,36 @@ else:
                             st.rerun()
 
                 if delete_marked:
-                    keep_rules = [
-                        rule for i, rule in enumerate(custom_rules)
-                        if not st.session_state.get(f"ifrules_delete_mark_{i}", False)
-                    ]
-                    if len(keep_rules) == len(custom_rules):
+                    has_marked = any(st.session_state.get(f"ifrules_delete_mark_{i}", False) for i in range(len(custom_rules)))
+                    if not has_marked:
                         st.warning("Keine Regel zum Löschen markiert.")
-                    else:
-                        _push_undo_snapshot(settings, "if_rules", custom_rules)
-                        custom_rules = keep_rules
-                        settings["custom_rules"] = custom_rules
-                        settings["custom_rules_enabled"] = custom_enabled
-                        settings["if_rules_scope_roles"] = ifrules_scope_roles
-                        save_settings(settings)
-                        _append_audit_entry("Wenn-Funktionen", "Regeln gelöscht", f"Verbleibend: {len(custom_rules)}")
-                        _show_toast("Markierte Regeln wurden gelöscht.")
+                    elif not st.session_state.get("ifrules_confirm_delete_overview", False):
+                        st.session_state.ifrules_confirm_delete_overview = True
                         st.rerun()
+
+                if st.session_state.get("ifrules_confirm_delete_overview", False):
+                    st.warning("Wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.")
+                    c_yes, c_no = st.columns(2)
+                    with c_yes:
+                        if st.button("Ja, löschen", key="ifrules_confirm_yes", type="primary"):
+                            st.session_state.ifrules_confirm_delete_overview = False
+                            keep_rules = [
+                                rule for i, rule in enumerate(custom_rules)
+                                if not st.session_state.get(f"ifrules_delete_mark_{i}", False)
+                            ]
+                            _push_undo_snapshot(settings, "if_rules", custom_rules)
+                            custom_rules = keep_rules
+                            settings["custom_rules"] = custom_rules
+                            settings["custom_rules_enabled"] = custom_enabled
+                            settings["if_rules_scope_roles"] = ifrules_scope_roles
+                            save_settings(settings)
+                            _append_audit_entry("Wenn-Funktionen", "Regeln gelöscht", f"Verbleibend: {len(custom_rules)}")
+                            _show_toast("Markierte Regeln wurden gelöscht.")
+                            st.rerun()
+                    with c_no:
+                        if st.button("Abbrechen", key="ifrules_confirm_no"):
+                            st.session_state.ifrules_confirm_delete_overview = False
+                            st.rerun()
 
                 with list_col:
                     if not custom_rules:
@@ -2091,6 +2200,19 @@ else:
                                 st.session_state.ifrules_selected_index = idx
                                 st.session_state.ifrules_editor_open = True
                                 st.rerun()
+                            move_cols = st.columns(2)
+                            with move_cols[0]:
+                                if idx > 0 and st.button("▲", key=f"ifrules_up_{idx}"):
+                                    custom_rules[idx], custom_rules[idx - 1] = custom_rules[idx - 1], custom_rules[idx]
+                                    settings["custom_rules"] = custom_rules
+                                    save_settings(settings)
+                                    st.rerun()
+                            with move_cols[1]:
+                                if idx < len(custom_rules) - 1 and st.button("▼", key=f"ifrules_down_{idx}"):
+                                    custom_rules[idx], custom_rules[idx + 1] = custom_rules[idx + 1], custom_rules[idx]
+                                    settings["custom_rules"] = custom_rules
+                                    save_settings(settings)
+                                    st.rerun()
                             st.checkbox("Löschen", key=f"ifrules_delete_mark_{idx}")
             else:
                 if not custom_rules:
@@ -2365,6 +2487,7 @@ else:
                         settings["reaction_roles_allowed_roles"] = rr_scope_roles
                         save_settings(settings)
                         _append_audit_entry("Reaktionsrollen", "Panel erstellt", f"Panels: {len(rr_panels)}")
+                        _show_toast("Neues Panel erstellt.")
                         st.session_state.reaction_roles_selected_index = len(rr_panels) - 1
                         st.session_state.reaction_roles_editor_open = True
                         st.rerun()
@@ -2387,22 +2510,36 @@ else:
                             st.rerun()
 
                 if delete_marked:
-                    keep_panels = [
-                        panel for i, panel in enumerate(rr_panels)
-                        if not st.session_state.get(f"rr_delete_mark_{i}", False)
-                    ]
-                    if len(keep_panels) == len(rr_panels):
+                    has_marked = any(st.session_state.get(f"rr_delete_mark_{i}", False) for i in range(len(rr_panels)))
+                    if not has_marked:
                         st.warning("Kein Panel zum Löschen markiert.")
-                    else:
-                        _push_undo_snapshot(settings, "reaction_roles", rr_panels)
-                        rr_panels = keep_panels
-                        settings["reaction_role_panels"] = rr_panels
-                        settings["reaction_roles_enabled"] = reaction_roles_enabled
-                        settings["reaction_roles_allowed_roles"] = rr_scope_roles
-                        save_settings(settings)
-                        _append_audit_entry("Reaktionsrollen", "Panels gelöscht", f"Verbleibend: {len(rr_panels)}")
-                        _show_toast("Markierte Reaktionsrollen-Panels wurden gelöscht.")
+                    elif not st.session_state.get("rr_confirm_delete_overview", False):
+                        st.session_state.rr_confirm_delete_overview = True
                         st.rerun()
+
+                if st.session_state.get("rr_confirm_delete_overview", False):
+                    st.warning("Wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.")
+                    c_yes, c_no = st.columns(2)
+                    with c_yes:
+                        if st.button("Ja, löschen", key="rr_confirm_yes", type="primary"):
+                            st.session_state.rr_confirm_delete_overview = False
+                            keep_panels = [
+                                panel for i, panel in enumerate(rr_panels)
+                                if not st.session_state.get(f"rr_delete_mark_{i}", False)
+                            ]
+                            _push_undo_snapshot(settings, "reaction_roles", rr_panels)
+                            rr_panels = keep_panels
+                            settings["reaction_role_panels"] = rr_panels
+                            settings["reaction_roles_enabled"] = reaction_roles_enabled
+                            settings["reaction_roles_allowed_roles"] = rr_scope_roles
+                            save_settings(settings)
+                            _append_audit_entry("Reaktionsrollen", "Panels gelöscht", f"Verbleibend: {len(rr_panels)}")
+                            _show_toast("Markierte Reaktionsrollen-Panels wurden gelöscht.")
+                            st.rerun()
+                    with c_no:
+                        if st.button("Abbrechen", key="rr_confirm_no"):
+                            st.session_state.rr_confirm_delete_overview = False
+                            st.rerun()
 
                 with list_col:
                     if not rr_panels:
@@ -2423,6 +2560,19 @@ else:
                                 st.session_state.reaction_roles_selected_index = idx
                                 st.session_state.reaction_roles_editor_open = True
                                 st.rerun()
+                            move_cols = st.columns(2)
+                            with move_cols[0]:
+                                if idx > 0 and st.button("▲", key=f"rr_up_{idx}"):
+                                    rr_panels[idx], rr_panels[idx - 1] = rr_panels[idx - 1], rr_panels[idx]
+                                    settings["reaction_role_panels"] = rr_panels
+                                    save_settings(settings)
+                                    st.rerun()
+                            with move_cols[1]:
+                                if idx < len(rr_panels) - 1 and st.button("▼", key=f"rr_down_{idx}"):
+                                    rr_panels[idx], rr_panels[idx + 1] = rr_panels[idx + 1], rr_panels[idx]
+                                    settings["reaction_role_panels"] = rr_panels
+                                    save_settings(settings)
+                                    st.rerun()
                             st.checkbox("Löschen", key=f"rr_delete_mark_{idx}")
             else:
                 if not rr_panels:
@@ -2743,6 +2893,7 @@ else:
                         settings["custom_commands_manager_roles"] = custom_manager_roles
                         save_settings(settings)
                         _append_audit_entry("Eigene Befehle", "Befehl erstellt", f"Befehle: {len(commands_list)}")
+                        _show_toast("Neuen Befehl erstellt.")
                         st.session_state.custom_selected_index = len(commands_list) - 1
                         st.session_state.custom_editor_open = True
                         st.rerun()
@@ -2772,22 +2923,36 @@ else:
                             st.rerun()
 
                 if delete_marked:
-                    filtered = [
-                        cmd for i, cmd in enumerate(commands_list)
-                        if not st.session_state.get(f"custom_cmd_delete_{i}", False)
-                    ]
-                    if len(filtered) == len(commands_list):
+                    has_marked = any(st.session_state.get(f"custom_cmd_delete_{i}", False) for i in range(len(commands_list)))
+                    if not has_marked:
                         st.warning("Kein Befehl zum Löschen markiert.")
-                    else:
-                        _push_undo_snapshot(settings, "custom_commands", commands_list)
-                        settings["custom_commands"] = filtered
-                        settings["custom_commands_prefix"] = custom_prefix
-                        settings["commands_enabled"] = custom_enabled
-                        settings["custom_commands_manager_roles"] = custom_manager_roles
-                        save_settings(settings)
-                        _append_audit_entry("Eigene Befehle", "Befehle gelöscht", f"Verbleibend: {len(filtered)}")
-                        _show_toast("Markierte Befehle wurden gelöscht.")
+                    elif not st.session_state.get("custom_confirm_delete_overview", False):
+                        st.session_state.custom_confirm_delete_overview = True
                         st.rerun()
+
+                if st.session_state.get("custom_confirm_delete_overview", False):
+                    st.warning("Wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.")
+                    c_yes, c_no = st.columns(2)
+                    with c_yes:
+                        if st.button("Ja, löschen", key="custom_confirm_yes", type="primary"):
+                            st.session_state.custom_confirm_delete_overview = False
+                            filtered = [
+                                cmd for i, cmd in enumerate(commands_list)
+                                if not st.session_state.get(f"custom_cmd_delete_{i}", False)
+                            ]
+                            _push_undo_snapshot(settings, "custom_commands", commands_list)
+                            settings["custom_commands"] = filtered
+                            settings["custom_commands_prefix"] = custom_prefix
+                            settings["commands_enabled"] = custom_enabled
+                            settings["custom_commands_manager_roles"] = custom_manager_roles
+                            save_settings(settings)
+                            _append_audit_entry("Eigene Befehle", "Befehle gelöscht", f"Verbleibend: {len(filtered)}")
+                            _show_toast("Markierte Befehle wurden gelöscht.")
+                            st.rerun()
+                    with c_no:
+                        if st.button("Abbrechen", key="custom_confirm_no"):
+                            st.session_state.custom_confirm_delete_overview = False
+                            st.rerun()
 
                 with list_col:
                     if not commands_list:
@@ -2812,6 +2977,19 @@ else:
                                 st.session_state.custom_selected_index = idx
                                 st.session_state.custom_editor_open = True
                                 st.rerun()
+                            move_cols = st.columns(2)
+                            with move_cols[0]:
+                                if idx > 0 and st.button("▲", key=f"custom_up_{idx}"):
+                                    commands_list[idx], commands_list[idx - 1] = commands_list[idx - 1], commands_list[idx]
+                                    settings["custom_commands"] = commands_list
+                                    save_settings(settings)
+                                    st.rerun()
+                            with move_cols[1]:
+                                if idx < len(commands_list) - 1 and st.button("▼", key=f"custom_down_{idx}"):
+                                    commands_list[idx], commands_list[idx + 1] = commands_list[idx + 1], commands_list[idx]
+                                    settings["custom_commands"] = commands_list
+                                    save_settings(settings)
+                                    st.rerun()
                             st.checkbox("Löschen", key=f"custom_cmd_delete_{idx}")
             else:
                 if not commands_list:
