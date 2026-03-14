@@ -1304,6 +1304,8 @@ else:
                             for idx, panel_item in enumerate(ticket_panels):
                                 if not st.session_state.get(f"ticket_delete_mark_{idx}", False):
                                     remaining_panels.append(panel_item)
+                            for i in range(len(ticket_panels)):
+                                st.session_state.pop(f"ticket_delete_mark_{i}", None)
                             ticket_panels = remaining_panels
                             settings["ticket_panels"] = ticket_panels
                             if not ticket_panels:
@@ -1334,11 +1336,6 @@ else:
                         if st.button("Abbrechen", key="ticket_confirm_no"):
                             st.session_state.ticket_confirm_delete_overview = False
                             st.rerun()
-                else:
-                    remaining_panels = []
-                    for idx, panel_item in enumerate(ticket_panels):
-                        if not st.session_state.get(f"ticket_delete_mark_{idx}", False):
-                            remaining_panels.append(panel_item)
 
                 with list_col:
                     for idx, panel in enumerate(ticket_panels):
@@ -1528,6 +1525,8 @@ else:
                         st.stop()
                     st.session_state.pop("tickets_editor_snapshot", None)
                     st.session_state.tickets_confirm_leave = False
+                    st.session_state.tickets_confirm_delete = False
+                    st.session_state.ticket_confirm_delete_overview = False
                     st.session_state.tickets_editor_open = False
                     st.session_state["toast_message"] = "Änderungen verworfen." if discard_btn else "Zurück zur Übersicht."
                     st.rerun()
@@ -1691,6 +1690,8 @@ else:
                             for idx, panel_item in enumerate(stempel_panels):
                                 if not st.session_state.get(f"stempeluhr_delete_mark_{idx}", False):
                                     remaining_stempel.append(panel_item)
+                            for i in range(len(stempel_panels)):
+                                st.session_state.pop(f"stempeluhr_delete_mark_{i}", None)
                             stempel_panels = remaining_stempel
                             settings["stempeluhr_panels"] = stempel_panels
                             if not stempel_panels:
@@ -1925,6 +1926,8 @@ else:
                         st.stop()
                     st.session_state.pop("stempeluhr_editor_snapshot", None)
                     st.session_state.stempeluhr_confirm_leave = False
+                    st.session_state.stempeluhr_confirm_delete = False
+                    st.session_state.stempeluhr_confirm_delete_overview = False
                     st.session_state.stempeluhr_editor_open = False
                     st.session_state["toast_message"] = "Änderungen verworfen." if discard_btn else "Zurück zur Übersicht."
                     st.rerun()
@@ -2146,6 +2149,7 @@ else:
                         else:
                             settings["custom_rules"] = [_normalize_if_rule(r) for r in restored]
                             save_settings(settings)
+                            st.session_state.ifrules_confirm_delete_overview = False
                             _append_audit_entry("Wenn-Funktionen", "Rückgängig", "Letzte Änderung wiederhergestellt")
                             _show_toast("Letzte Änderung wurde rückgängig gemacht.")
                             st.rerun()
@@ -2168,6 +2172,8 @@ else:
                                 rule for i, rule in enumerate(custom_rules)
                                 if not st.session_state.get(f"ifrules_delete_mark_{i}", False)
                             ]
+                            for i in range(len(custom_rules)):
+                                st.session_state.pop(f"ifrules_delete_mark_{i}", None)
                             _push_undo_snapshot(settings, "if_rules", custom_rules)
                             custom_rules = keep_rules
                             settings["custom_rules"] = custom_rules
@@ -2268,6 +2274,7 @@ else:
                 st.code(_preview_text(message, "#ziel-kanal"), language="text")
 
                 if back_btn or discard_btn:
+                    st.session_state.ifrules_confirm_delete_overview = False
                     st.session_state.ifrules_editor_open = False
                     st.rerun()
 
@@ -2505,6 +2512,7 @@ else:
                         else:
                             settings["reaction_role_panels"] = [_normalize_reaction_panel(p, i) for i, p in enumerate(restored)]
                             save_settings(settings)
+                            st.session_state.rr_confirm_delete_overview = False
                             _append_audit_entry("Reaktionsrollen", "Rückgängig", "Letzte Änderung wiederhergestellt")
                             _show_toast("Letzte Änderung wurde rückgängig gemacht.")
                             st.rerun()
@@ -2527,6 +2535,8 @@ else:
                                 panel for i, panel in enumerate(rr_panels)
                                 if not st.session_state.get(f"rr_delete_mark_{i}", False)
                             ]
+                            for i in range(len(rr_panels)):
+                                st.session_state.pop(f"rr_delete_mark_{i}", None)
                             _push_undo_snapshot(settings, "reaction_roles", rr_panels)
                             rr_panels = keep_panels
                             settings["reaction_role_panels"] = rr_panels
@@ -2629,6 +2639,7 @@ else:
                 _render_embed_preview(title, _preview_text(description, "#reaktion-kanal"), "(Kein Footer konfiguriert)")
 
                 if back_btn or discard_btn:
+                    st.session_state.rr_confirm_delete_overview = False
                     st.session_state.reaction_roles_editor_open = False
                     st.rerun()
 
@@ -2918,6 +2929,7 @@ else:
                         else:
                             settings["custom_commands"] = [_normalize_custom_command(c) for c in restored]
                             save_settings(settings)
+                            st.session_state.custom_confirm_delete_overview = False
                             _append_audit_entry("Eigene Befehle", "Rückgängig", "Letzte Änderung wiederhergestellt")
                             _show_toast("Letzte Änderung wurde rückgängig gemacht.")
                             st.rerun()
@@ -2940,6 +2952,8 @@ else:
                                 cmd for i, cmd in enumerate(commands_list)
                                 if not st.session_state.get(f"custom_cmd_delete_{i}", False)
                             ]
+                            for i in range(len(commands_list)):
+                                st.session_state.pop(f"custom_cmd_delete_{i}", None)
                             _push_undo_snapshot(settings, "custom_commands", commands_list)
                             settings["custom_commands"] = filtered
                             settings["custom_commands_prefix"] = custom_prefix
@@ -3032,6 +3046,7 @@ else:
                 st.code(_preview_text(new_response, "#ziel-kanal"), language="text")
 
                 if back_btn or discard_btn:
+                    st.session_state.custom_confirm_delete_overview = False
                     st.session_state.custom_editor_open = False
                     st.rerun()
 
