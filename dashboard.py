@@ -1568,7 +1568,6 @@ else:
             st.markdown("4. Jede Konfiguration wird im eigenen Server-Profil gespeichert und nicht übernommen.")
             st.markdown("5. Dashboard-Zugriffe pro Server verwaltest du in Einstellungen.")
 
-        st.sidebar.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
         sync_state = _auto_sync_discord_data_if_needed(discord_data)
         age_seconds = sync_state.get("age_seconds")
         if sync_state.get("requested"):
@@ -1629,7 +1628,7 @@ else:
             "Audit-Logs": "Audit-Logs",
         }
         nav_sections = [
-            ("Grundlegende Information", ["Overview", "Server Tools", "Embed Hub", "Auto Mod", "Logging"]),
+            ("Grundlegende Information", ["Overview", "Server Tools", "Auto Mod", "Logging", "Embed Hub"]),
             ("Server Verwaltung", ["Tickets", "Stempeluhr", "Warns/Sanktionen", "Custom Commands", "If Rules", "Reaction Roles"]),
             ("Community", ["Ankündigungen", "Umfragen", "Giveaway"]),
             ("System", ["Settings", "Audit-Logs"]),
