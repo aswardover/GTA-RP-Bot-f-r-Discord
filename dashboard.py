@@ -2600,6 +2600,7 @@ else:
                     if st.button("Ankündigung Embed speichern"):
                         settings["announce_enabled"] = announce_enabled
                         settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
+                        settings["announce_embed_enabled"] = announce_embed_enabled
                         settings["announce_embed_title"] = announce_embed_title
                         settings["announce_embed_description"] = announce_embed_description
                         settings["announce_embed_color"] = announce_embed_color
@@ -2610,6 +2611,7 @@ else:
                      if st.button("Ankündigung veröffentlichen"):
                         settings["announce_enabled"] = announce_enabled
                         settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
+                        settings["announce_embed_enabled"] = announce_embed_enabled
                         settings["announce_publish_trigger"] = True
                         save_settings(settings)
                         _show_toast("Ankündigung wird veröffentlicht.")
