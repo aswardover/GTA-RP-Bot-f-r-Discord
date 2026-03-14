@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 import streamlit as st
 import streamlit.components.v1 as components
 import json
@@ -351,15 +351,30 @@ st.markdown("""
         font-weight: 700;
         font-size: 0.95rem;
     }
-    /* Fix for invisible toast text (white on white) */
+    /* Global Streamlit toast behavior: top-center and 3 seconds visible. */
     div[data-testid="stToast"] {
-        background-color: #ffffff !important;
-        color: #000000 !important;
+        position: fixed !important;
+        top: 14px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        z-index: 10000 !important;
+        background: #f8fafc !important;
+        color: #0f172a !important;
+        border: 1px solid rgba(15,23,42,0.2) !important;
+        border-radius: 10px !important;
+        box-shadow: 0 10px 28px rgba(0,0,0,0.35) !important;
+        animation: stToastFade3s 3s ease-in-out !important;
     }
     div[data-testid="stToast"] p,
     div[data-testid="stToast"] span,
     div[data-testid="stToast"] div {
-        color: #000000 !important;
+        color: #0f172a !important;
+    }
+    @keyframes stToastFade3s {
+        0% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+        12% { opacity: 1; transform: translateX(-50%) translateY(0); }
+        86% { opacity: 1; transform: translateX(-50%) translateY(0); }
+        100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
     }
     /* Improve readability across the dashboard with high-contrast text. */
     .stMarkdown,
@@ -1141,7 +1156,8 @@ def select_role_id(label, roles_mapping, current_value, key_prefix, allow_manual
 
 def render_page_header(title, subtitle):
     st.markdown(f"<h2 class='section-title'>{title}</h2>", unsafe_allow_html=True)
-    st.markdown(f"<p class='section-sub'>{subtitle}</p>", unsafe_allow_html=True)
+    if str(subtitle or "").strip():
+        st.markdown(f"<p class='section-sub'>{subtitle}</p>", unsafe_allow_html=True)
 
 PLACEHOLDER_REGISTRY = {
     "announce": ["{text}", "{user}"],
@@ -1354,8 +1370,11 @@ def _render_session_toast():
     """Renders a success toast/message if set in session state."""
     if "toast_message" in st.session_state:
         msg = st.session_state.toast_message
-        st.toast(msg)
+        _show_toast(msg)
         del st.session_state.toast_message
+
+def _show_toast(message):
+    st.toast(str(message))
 
 # --- LOGIN LOGIK ---
 def login_form():
@@ -1682,9 +1701,8 @@ else:
             st.rerun()
         
         if page == "Übersicht":
-            render_page_header("Bot Übersicht", "Schneller Überblick über Status und Kernmetriken.")
+            render_page_header("Bot Übersicht", "")
             refreshed_data = load_discord_data()
-            runtime = _bot_runtime_status()
             guild_stats = _guild_stats_for_selected(discord_data, selected_server_entry)
             if isinstance(refreshed_data, dict):
                 guild_stats = _guild_stats_for_selected(refreshed_data, selected_server_entry)
@@ -1703,14 +1721,7 @@ else:
                 st.metric("Online", str(guild_stats.get("online_count", 0)))
             with col3:
                 st.metric("Tickets", str(live_tickets))
-            
-            state_text = "Bot online" if runtime.get("online") else "Bot offline"
-            state_color = "#86efac" if runtime.get("online") else "#fca5a5"
-            last_seen = runtime.get("last_seen") or "unbekannt"
-            st.markdown(
-                f'<div class="status-card"><b style="color:{state_color};">{state_text}</b></div>',
-                unsafe_allow_html=True,
-            )
+
             _render_member_copy_list(members)
 
         elif page == "Tickets":
@@ -2333,7 +2344,7 @@ else:
                 settings["automod_log_channel"] = log_channel_id
                 settings["automod_mute_role"] = mute_role_id
                 save_settings(settings)
-                st.success("Automod-Einstellungen gespeichert!")
+                _show_toast("Automod-Einstellungen gespeichert!")
 
         elif page == "Server Tools":
             render_page_header("Server Tools", "Moderationstools für den RP-Alltag: Slowmode, Lock/Unlock, Timeout.")
@@ -2369,7 +2380,7 @@ else:
                 ])
                 save_settings(settings)
                 _append_audit_entry("Server Tools", "Einstellungen gespeichert", f"Aktive Tools: {sum([slowmode_enabled, lock_enabled, unlock_enabled, timeout_enabled, untimeout_enabled])}")
-                st.success("Server Tools gespeichert.")
+                _show_toast("Server Tools gespeichert.")
 
         elif page == "Wenn-Funktionen":
             render_page_header("Wenn-Funktionen", "Eventbasierte Regeln für Rollen-Events und Auto-Aktionen.")
@@ -2421,7 +2432,7 @@ else:
                         settings["if_rules_scope_roles"] = ifrules_scope_roles
                         save_settings(settings)
                         _append_audit_entry("Wenn-Funktionen", "Status gespeichert", f"Aktiv: {custom_enabled}")
-                        st.success("Wenn-Funktionen gespeichert.")
+                        _show_toast("Wenn-Funktionen gespeichert.")
                     if st.button("Letzte Änderung rückgängig", key="ifrules_undo", type="secondary"):
                         restored = _pop_undo_snapshot(settings, "if_rules")
                         if restored is None:
@@ -2430,7 +2441,7 @@ else:
                             settings["custom_rules"] = [_normalize_if_rule(r) for r in restored]
                             save_settings(settings)
                             _append_audit_entry("Wenn-Funktionen", "Rückgängig", "Letzte Änderung wiederhergestellt")
-                            st.success("Letzte Änderung wurde rückgängig gemacht.")
+                            _show_toast("Letzte Änderung wurde rückgängig gemacht.")
                             st.rerun()
 
                 if delete_marked:
@@ -2448,7 +2459,7 @@ else:
                         settings["if_rules_scope_roles"] = ifrules_scope_roles
                         save_settings(settings)
                         _append_audit_entry("Wenn-Funktionen", "Regeln gelöscht", f"Verbleibend: {len(custom_rules)}")
-                        st.success("Markierte Regeln wurden gelöscht.")
+                        _show_toast("Markierte Regeln wurden gelöscht.")
                         st.rerun()
 
                 with list_col:
@@ -2550,7 +2561,7 @@ else:
                         settings["if_rules_scope_roles"] = ifrules_scope_roles
                         save_settings(settings)
                         _append_audit_entry("Wenn-Funktionen", "Regel gespeichert", f"Regel {selected_idx + 1}")
-                        st.success("Regel gespeichert.")
+                        _show_toast("Regel gespeichert.")
                         st.session_state.ifrules_editor_open = False
                         st.rerun()
 
@@ -2580,7 +2591,7 @@ else:
                 settings["giveaway_embed_footer"] = giveaway_embed_footer
                 settings["giveaway_send_as_embed"] = giveaway_send_as_embed
                 save_settings(settings)
-                st.success("Gewinnspiel-Embed gespeichert!")
+                _show_toast("Gewinnspiel-Embed gespeichert!")
 
         elif page == "Ankündigungen":
             render_page_header("Ankündigungen", "Steuere Channel, Embed-Layout und Publishing für Ankündigungen.")
@@ -2614,14 +2625,14 @@ else:
                         settings["announce_embed_color"] = announce_embed_color
                         settings["announce_embed_footer"] = announce_embed_footer
                         save_settings(settings)
-                        st.toast("Ankündigung Embed gespeichert!")
+                        _show_toast("Ankündigung Embed gespeichert!")
                 with c2:
                      if st.button("Ankündigung veröffentlichen"):
                         settings["announce_enabled"] = announce_enabled
                         settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
                         settings["announce_publish_trigger"] = True
                         save_settings(settings)
-                        st.toast("Ankündigung wird veröffentlicht.")
+                        _show_toast("Ankündigung wird veröffentlicht.")
             else:
                 c1, c2 = st.columns(2)
                 with c1:
@@ -2630,14 +2641,14 @@ else:
                         settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
                         settings["announce_embed_enabled"] = announce_embed_enabled
                         save_settings(settings)
-                        st.toast("Gespeichert!")
+                        _show_toast("Gespeichert!")
                 with c2:
                     if st.button("Ankündigung veröffentlichen"):
                         settings["announce_enabled"] = announce_enabled
                         settings["announce_channel_id"] = announce_channel_id or settings.get("announce_channel_id")
                         settings["announce_publish_trigger"] = True
                         save_settings(settings)
-                        st.toast("Ankündigung wird veröffentlicht.")
+                        _show_toast("Ankündigung wird veröffentlicht.")
 
         elif page == "Reaction Roles":
             render_page_header("Reaktionsrollen", "Lege Rollen-Panels mit Emoji-Zuordnung einfach fest.")
@@ -2718,7 +2729,7 @@ else:
                         settings["reaction_roles_allowed_roles"] = rr_scope_roles
                         save_settings(settings)
                         _append_audit_entry("Reaktionsrollen", "Status gespeichert", f"Aktiv: {reaction_roles_enabled}")
-                        st.success("Reaktionsrollen gespeichert.")
+                        _show_toast("Reaktionsrollen gespeichert.")
                     if st.button("Letzte Änderung rückgängig", key="rr_undo", type="secondary"):
                         restored = _pop_undo_snapshot(settings, "reaction_roles")
                         if restored is None:
@@ -2727,7 +2738,7 @@ else:
                             settings["reaction_role_panels"] = [_normalize_reaction_panel(p, i) for i, p in enumerate(restored)]
                             save_settings(settings)
                             _append_audit_entry("Reaktionsrollen", "Rückgängig", "Letzte Änderung wiederhergestellt")
-                            st.success("Letzte Änderung wurde rückgängig gemacht.")
+                            _show_toast("Letzte Änderung wurde rückgängig gemacht.")
                             st.rerun()
 
                 if delete_marked:
@@ -2745,7 +2756,7 @@ else:
                         settings["reaction_roles_allowed_roles"] = rr_scope_roles
                         save_settings(settings)
                         _append_audit_entry("Reaktionsrollen", "Panels gelöscht", f"Verbleibend: {len(rr_panels)}")
-                        st.success("Markierte Reaktionsrollen-Panels wurden gelöscht.")
+                        _show_toast("Markierte Reaktionsrollen-Panels wurden gelöscht.")
                         st.rerun()
 
                 with list_col:
@@ -2877,12 +2888,12 @@ else:
                                     rr_panels[selected_idx] = panel
                                     settings["reaction_role_panels"] = rr_panels
                                     save_settings(settings)
-                                    st.success("Reaktionsrollen-Nachricht wird gesendet!")
+                                    _show_toast("Reaktionsrollen-Nachricht wird gesendet!")
                     else:
                         _push_undo_snapshot(settings, "reaction_roles", rr_panels)
                         save_settings(settings)
                         _append_audit_entry("Reaktionsrollen", "Panel gespeichert", panel_name)
-                        st.success("Reaktionsrollen-Panel gespeichert.")
+                        _show_toast("Reaktionsrollen-Panel gespeichert.")
 
         elif page == "Umfragen":
             render_page_header("Umfragen", "Definiere Titel, Farbe und Footer für Poll-Embeds.")
@@ -2906,7 +2917,7 @@ else:
                 settings["poll_embed_footer"] = poll_embed_footer
                 settings["poll_send_as_embed"] = poll_send_as_embed
                 save_settings(settings)
-                st.success("Umfrage Embed gespeichert!")
+                _show_toast("Umfrage Embed gespeichert!")
 
         elif page == "Warns/Sanktionen":
             render_page_header("Warns/Sanktionen", "Sanktions-, Warn- und Log-Templates zentral verwalten.")
@@ -2955,7 +2966,7 @@ else:
                 settings["warn_send_as_embed"] = warn_send_as_embed
                 settings["moderation_log_channel"] = moderation_log_channel_id
                 save_settings(settings)
-                st.success("Warns/Sanktionen gespeichert!")
+                _show_toast("Warns/Sanktionen gespeichert!")
 
         elif page == "Logging":
             render_page_header("Protokolle", "Aktiviere Logs und wähle den Ziel-Kanal.")
@@ -2966,7 +2977,7 @@ else:
                 settings["logging_enabled"] = logging_enabled
                 settings["logging_channel_id"] = logging_channel_id
                 save_settings(settings)
-                st.success("Protokolle gespeichert!")
+                _show_toast("Protokolle gespeichert!")
 
         elif page == "Einstellungen":
             render_page_header("Allgemeine Einstellungen", "Globale Basiswerte für Kern-Module.")
@@ -2980,7 +2991,7 @@ else:
             if st.button("Speichern"):
                 settings["automod_enabled"] = automod_enabled
                 save_settings(settings)
-                st.success("Einstellungen gespeichert!")
+                _show_toast("Einstellungen gespeichert!")
                 st.rerun()  # Seite neu laden, um Navigation zu aktualisieren
 
             st.markdown("<hr class='soft-divider' />", unsafe_allow_html=True)
@@ -2995,7 +3006,7 @@ else:
                 st.caption("Nur deine Owner-ID kann diese Liste bearbeiten.")
                 if st.button("Dashboard-Benutzer speichern"):
                     _set_allowed_ids_for_server(active_server_key, parse_id_list(allowed_input))
-                    st.success("Zugriffsrechte für den ausgewählten Server gespeichert.")
+                    _show_toast("Zugriffsrechte für den ausgewählten Server gespeichert.")
                     st.rerun()
             else:
                 st.write("Freigegebene IDs:")
@@ -3035,7 +3046,7 @@ else:
                 if st.button("Audit-Logs leeren", type="secondary"):
                     with open(AUDIT_LOG_FILE, 'w', encoding='utf-8') as f:
                         json.dump([], f, indent=2, ensure_ascii=False)
-                    st.success("Audit-Logs wurden geleert.")
+                    _show_toast("Audit-Logs wurden geleert.")
                     st.rerun()
 
         elif page == "Custom Commands":
@@ -3100,7 +3111,7 @@ else:
                         settings["custom_commands_manager_roles"] = custom_manager_roles
                         save_settings(settings)
                         _append_audit_entry("Eigene Befehle", "Status gespeichert", f"Aktiv: {custom_enabled}")
-                        st.success("Eigene Befehle gespeichert.")
+                        _show_toast("Eigene Befehle gespeichert.")
                     if st.button("Letzte Änderung rückgängig", key="custom_undo", type="secondary"):
                         restored = _pop_undo_snapshot(settings, "custom_commands")
                         if restored is None:
@@ -3109,7 +3120,7 @@ else:
                             settings["custom_commands"] = [_normalize_custom_command(c) for c in restored]
                             save_settings(settings)
                             _append_audit_entry("Eigene Befehle", "Rückgängig", "Letzte Änderung wiederhergestellt")
-                            st.success("Letzte Änderung wurde rückgängig gemacht.")
+                            _show_toast("Letzte Änderung wurde rückgängig gemacht.")
                             st.rerun()
 
                 if delete_marked:
@@ -3127,7 +3138,7 @@ else:
                         settings["custom_commands_manager_roles"] = custom_manager_roles
                         save_settings(settings)
                         _append_audit_entry("Eigene Befehle", "Befehle gelöscht", f"Verbleibend: {len(filtered)}")
-                        st.success("Markierte Befehle wurden gelöscht.")
+                        _show_toast("Markierte Befehle wurden gelöscht.")
                         st.rerun()
 
                 with list_col:
@@ -3222,7 +3233,7 @@ else:
                         settings["custom_commands_manager_roles"] = custom_manager_roles
                         save_settings(settings)
                         _append_audit_entry("Eigene Befehle", "Befehl gespeichert", f"{custom_prefix}{candidate}")
-                        st.success("Eigener Befehl gespeichert.")
+                        _show_toast("Eigener Befehl gespeichert.")
                         st.session_state.custom_editor_open = False
                         st.rerun()
 
@@ -3301,4 +3312,5 @@ else:
 
             if st.button("Alle Embed-Vorlagen speichern"):
                 save_settings(settings)
-                st.success("Embed Hub gespeichert.")
+                _show_toast("Embed Hub gespeichert.")
+
