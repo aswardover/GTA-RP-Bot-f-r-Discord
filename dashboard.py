@@ -1249,6 +1249,9 @@ def select_channel_id(label, channels_mapping, current_value, key_prefix, allow_
     channel_names = list(channels_mapping.keys())
     current_str = str(current_value).strip() if current_value is not None else ""
     selected_id = current_str or None
+    name_key = f"{key_prefix}_name"
+    manual_key = f"{key_prefix}_manual_id"
+    sync_key = f"{key_prefix}_last_synced_name"
 
     if channel_names:
         def_idx = index_for_value(channels_mapping, current_value)
@@ -1256,10 +1259,18 @@ def select_channel_id(label, channels_mapping, current_value, key_prefix, allow_
             label,
             options=[""] + channel_names,
             index=(def_idx + 1) if channel_names else 0,
-            key=f"{key_prefix}_name",
+            key=name_key,
         )
         if selected_name:
             selected_id = str(channels_mapping.get(selected_name))
+
+        # Keep the ID input in sync when dropdown selection changes.
+        if allow_manual_input:
+            if sync_key not in st.session_state:
+                st.session_state[sync_key] = selected_name
+            if st.session_state.get(sync_key) != selected_name:
+                st.session_state[manual_key] = selected_id or ""
+                st.session_state[sync_key] = selected_name
     else:
         message = "Keine Kanaele verfuegbar. Auto-Sync laeuft im Hintergrund; bitte kurz warten."
         if allow_manual_input:
@@ -1267,10 +1278,11 @@ def select_channel_id(label, channels_mapping, current_value, key_prefix, allow_
         st.warning(message)
 
     if allow_manual_input:
+        if manual_key not in st.session_state:
+            st.session_state[manual_key] = selected_id or ""
         manual_id = st.text_input(
             f"{label} ID",
-            value=selected_id or "",
-            key=f"{key_prefix}_manual_id",
+            key=manual_key,
         ).strip()
         if manual_id:
             return manual_id
